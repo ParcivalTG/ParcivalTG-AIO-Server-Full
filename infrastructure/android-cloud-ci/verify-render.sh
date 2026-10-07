@@ -21,6 +21,7 @@ if [[ ! -x "$GRADLE/bin/gradle" ]]; then
   curl -fsSL "https://services.gradle.org/distributions/gradle-8.13-bin.zip" -o "$TOOLS/gradle.zip"
   python3 -m zipfile -e "$TOOLS/gradle.zip" "$TOOLS"
 fi
+chmod +x "$GRADLE/bin/gradle"
 
 CMD_VERSION=15859902
 CMD_SHA256=4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583
@@ -32,6 +33,7 @@ if [[ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]]; then
   python3 -m zipfile -e "$TOOLS/android-tools.zip" "$SDK/cmdline-tools"
   mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
 fi
+chmod +x "$SDK/cmdline-tools/latest/bin/"*
 
 export JAVA_HOME="$JDK"
 export ANDROID_HOME="$SDK"
