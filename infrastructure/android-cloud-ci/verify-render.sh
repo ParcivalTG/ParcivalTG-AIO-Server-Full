@@ -85,7 +85,12 @@ APK_BYTES="$(stat -c %s "$APK")"
   echo "gradle_exit=0"
   echo "apk_sha256=$APK_SHA"
   echo "apk_bytes=$APK_BYTES"
+  echo "signing_class=EPHEMERAL_DEBUG_VERIFICATION_ONLY"
 } >> "$PUBLIC/test-summary.txt"
+cp "$APK" "$PUBLIC/aio-founder-debug-verification-only.apk"
+echo "=== AIO_ANDROID_VERIFICATION_SUMMARY ==="
+cat "$PUBLIC/test-summary.txt"
+echo "=== END_AIO_ANDROID_VERIFICATION_SUMMARY ==="
 
 python3 - <<'PY'
 from pathlib import Path
