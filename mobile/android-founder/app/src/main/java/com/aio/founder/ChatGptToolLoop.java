@@ -52,6 +52,13 @@ final class ChatGptToolLoop {
         if(execution==null||execution.output==null||execution.output.isBlank()||
            execution.output.length()>128*1024)
             throw new IllegalArgumentException("CHATGPT_FUNCTION_OUTPUT_INVALID");
+
+        boolean attachesImage=false;
+        for(ChatGptResponsesContract.InputItem item:execution.continuationInputs)
+            if(ChatGptResponsesContract.isInputImage(item))attachesImage=true;
+        if(attachesImage)
+            next.removeIf(ChatGptResponsesContract::isInputImage);
+
         next.add(ChatGptResponsesContract.functionOutput(call.callId,execution.output));
         for(ChatGptResponsesContract.InputItem item:execution.continuationInputs){
             if(item==null||item.json()==null||item.json().isBlank())
