@@ -33,17 +33,28 @@ final class ChatGptProviderState {
 
     synchronized void authorized(ChatGptSessionCodec.Session session,
                                  List<ChatGptResponsesContract.Model> catalog){
-        if(session==null||catalog==null||catalog.isEmpty())
+        if(session==null||catalog==null)
             throw new IllegalArgumentException("CHATGPT_PROVIDER_STATE_INVALID");
+        accountLabel=!session.email.isEmpty()?session.email:
+            (!session.name.isEmpty()?session.name:session.subject);
+        planUsageGranted=session.tokens.planUsageGranted;
+
+        if(!planUsageGranted){
+            models=List.of();
+            selectedModel="";
+            phase=Phase.SIGNED_IN_NO_PLAN;
+            lastCode="CHATGPT_PLAN_USAGE_NOT_GRANTED";
+            return;
+        }
+
+        if(catalog.isEmpty())
+            throw new IllegalArgumentException("CHATGPT_MODEL_CATALOG_EMPTY");
         String prior=selectedModel;
         models=List.copyOf(catalog);
         boolean keep=!prior.isEmpty()&&models.stream().anyMatch(x->prior.equals(x.slug));
         selectedModel=keep?prior:models.get(0).slug;
-        accountLabel=!session.email.isEmpty()?session.email:
-            (!session.name.isEmpty()?session.name:session.subject);
-        planUsageGranted=session.tokens.planUsageGranted;
-        phase=planUsageGranted?Phase.READY:Phase.SIGNED_IN_NO_PLAN;
-        lastCode=planUsageGranted?"CHATGPT_READY":"CHATGPT_PLAN_USAGE_NOT_GRANTED";
+        phase=Phase.READY;
+        lastCode="CHATGPT_READY";
     }
 
     synchronized void selectModel(String slug){
