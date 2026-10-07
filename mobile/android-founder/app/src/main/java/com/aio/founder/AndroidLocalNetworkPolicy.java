@@ -26,7 +26,10 @@ final class AndroidLocalNetworkPolicy {
     }
 
     static boolean needsRuntimePermission(int sdk,String host){
-        return sdk>=36&&likelyLocalHost(host);
+        // Production targetSdk=36: Android 16 keeps local-network access
+        // implicitly granted through INTERNET. Do not add a false runtime gate.
+        // Android 17+ (SDK/target 37) requires ACCESS_LOCAL_NETWORK.
+        return sdk>=37&&likelyLocalHost(host);
     }
 
     static String permissionName(int sdk){
