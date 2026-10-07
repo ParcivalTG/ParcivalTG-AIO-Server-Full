@@ -1,0 +1,10 @@
+AIO Founder Android 0.7.0 candidate R5
+
+sourceHead=d0595a8284b0b978d9d7d3994f85e3692c98c613
+apkSha256=14b30c1423903d5dabdd16c143b3268ae267b181b4b1e443d9ccc403b6ca2ea4
+apkBytes=3358663
+signerSha256=7953eaf5be406f0996b9105623d48da6e51f1223264999c74caa41f19483c569
+cloudJvmTests=267/267 PASS
+cloudLint=PASS
+api36Instrumentation=5/5 PASS
+physicalS25=NOT_YET_PROVEN
