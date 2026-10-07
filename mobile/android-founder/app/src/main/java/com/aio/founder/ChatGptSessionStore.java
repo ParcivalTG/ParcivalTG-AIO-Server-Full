@@ -39,6 +39,21 @@ final class ChatGptSessionStore {
         return created;
     }
 
+    synchronized void saveIssuedRegistration(String expectedHostId,String clientId)throws Exception{
+        if(expectedHostId==null||!hostId().equals(expectedHostId))
+            throw new SecurityException("CHATGPT_REGISTRATION_HOST_MISMATCH");
+        if(clientId==null||!clientId.matches("oaiapp_[A-Za-z0-9._:-]{1,240}"))
+            throw new SecurityException("CHATGPT_REGISTRATION_CLIENT_INVALID");
+        Registration current=registration();
+        if(current!=null&&!current.clientId.equals(clientId))
+            throw new SecurityException("CHATGPT_REGISTRATION_CLIENT_MISMATCH");
+        secrets.saveText(REGISTRATION_SECRET,registrationJson(new Registration(
+            expectedHostId,clientId,
+            current==null?"":current.subject,
+            current==null?"":current.email,
+            current==null?"":current.name)));
+    }
+
     synchronized void save(ChatGptSessionCodec.Session session)throws Exception{
         if(session==null||!hostId().equals(session.hostId))
             throw new SecurityException("CHATGPT_SESSION_HOST_MISMATCH");
@@ -104,7 +119,6 @@ final class ChatGptSessionStore {
             throw new SecurityException("CHATGPT_REGISTRATION_HOST_INVALID");
         if(!client.matches("oaiapp_[A-Za-z0-9._:-]{1,240}"))
             throw new SecurityException("CHATGPT_REGISTRATION_CLIENT_INVALID");
-        if(subject.isBlank())throw new SecurityException("CHATGPT_REGISTRATION_SUBJECT_INVALID");
         return new Registration(host,client,subject,email,name);
     }
 
