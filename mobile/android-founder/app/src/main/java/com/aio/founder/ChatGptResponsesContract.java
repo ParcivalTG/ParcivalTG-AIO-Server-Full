@@ -3,6 +3,7 @@ package com.aio.founder;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -12,6 +13,7 @@ final class ChatGptResponsesContract {
     static final String RESPONSES_ENDPOINT="https://api.openai.com/v1/responses";
     private static final int MAX_REQUEST_BYTES=512*1024;
     private static final int MAX_EVENT_BYTES=512*1024;
+    private static final int MAX_INPUT_IMAGE_BYTES=AndroidRemoteScreenPolicy.GPT_MAX_JPEG_BYTES;
     private static final int MAX_OUTPUT_CHARS=1_600_000;
     private static final int MAX_REASONING_ITEM_CHARS=256*1024;
     private static final int MAX_FUNCTION_ITEM_CHARS=128*1024;
@@ -74,6 +76,24 @@ final class ChatGptResponsesContract {
         if(!MESSAGE_ROLES.contains(role))throw new IllegalArgumentException("CHATGPT_INPUT_ROLE_INVALID");
         String body=bounded(text,64*1024,"CHATGPT_INPUT_TEXT_INVALID");
         return new RawInput("{\"role\":\""+escape(role)+"\",\"content\":\""+escape(body)+"\"}");
+    }
+
+    static InputItem jpegImage(String base64){
+        if(base64==null||base64.isBlank()||base64.length()>((MAX_INPUT_IMAGE_BYTES+2)/3)*4+8)
+            throw new IllegalArgumentException("CHATGPT_INPUT_IMAGE_INVALID");
+        byte[] bytes;
+        try{bytes=Base64.getDecoder().decode(base64);}
+        catch(IllegalArgumentException invalid){throw new IllegalArgumentException("CHATGPT_INPUT_IMAGE_INVALID");}
+        try{
+            if(bytes.length<4||bytes.length>MAX_INPUT_IMAGE_BYTES||
+               (bytes[0]&0xff)!=0xff||(bytes[1]&0xff)!=0xd8||
+               !Base64.getEncoder().encodeToString(bytes).equals(base64))
+                throw new IllegalArgumentException("CHATGPT_INPUT_IMAGE_INVALID");
+        }finally{java.util.Arrays.fill(bytes,(byte)0);}
+        return new RawInput(
+            "{\"role\":\"user\",\"content\":["+
+            "{\"type\":\"input_text\",\"text\":\"Current Android screen captured by the Founder-granted AIO screen tool.\"},"+
+            "{\"type\":\"input_image\",\"image_url\":\"data:image/jpeg;base64,"+escape(base64)+"\",\"detail\":\"auto\"}]}");
     }
 
     static InputItem reasoning(String rawJson)throws Exception{
