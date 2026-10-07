@@ -14,25 +14,29 @@ final class AndroidFounderReadiness {
         final boolean foregroundVisible;
         final boolean presenceAuthenticated;
         final boolean peerVerified;
+        final boolean chatGptReady;
 
         Snapshot(boolean releaseIdentity,boolean pairingMaterial,boolean routeConfigured,
                  boolean directPermissionReady,boolean persistentEnabled,boolean notificationReady,
                  boolean storageGranted,boolean screenConsentActive,boolean gestureServiceEnabled,
-                 boolean foregroundVisible,boolean presenceAuthenticated,boolean peerVerified){
+                 boolean foregroundVisible,boolean presenceAuthenticated,boolean peerVerified,
+                 boolean chatGptReady){
             this.releaseIdentity=releaseIdentity;this.pairingMaterial=pairingMaterial;
             this.routeConfigured=routeConfigured;this.directPermissionReady=directPermissionReady;
             this.persistentEnabled=persistentEnabled;this.notificationReady=notificationReady;
             this.storageGranted=storageGranted;this.screenConsentActive=screenConsentActive;
             this.gestureServiceEnabled=gestureServiceEnabled;this.foregroundVisible=foregroundVisible;
             this.presenceAuthenticated=presenceAuthenticated;this.peerVerified=peerVerified;
+            this.chatGptReady=chatGptReady;
         }
     }
 
     static final class Report {
-        final String installIdentity,connection,remoteAuthority,optionalCapabilities,overall;
-        Report(String installIdentity,String connection,String remoteAuthority,String optionalCapabilities,String overall){
+        final String installIdentity,connection,remoteAuthority,chatProvider,optionalCapabilities,overall;
+        Report(String installIdentity,String connection,String remoteAuthority,String chatProvider,
+               String optionalCapabilities,String overall){
             this.installIdentity=installIdentity;this.connection=connection;this.remoteAuthority=remoteAuthority;
-            this.optionalCapabilities=optionalCapabilities;this.overall=overall;
+            this.chatProvider=chatProvider;this.optionalCapabilities=optionalCapabilities;this.overall=overall;
         }
 
         String summary(){
@@ -41,6 +45,7 @@ final class AndroidFounderReadiness {
                 "\nInstall identity: "+installIdentity+
                 "\nPairing/route: "+connection+
                 "\nWindows peer authority: "+remoteAuthority+
+                "\nChatGPT in AIO: "+chatProvider+
                 "\nOptional capabilities: "+optionalCapabilities;
         }
     }
@@ -55,6 +60,7 @@ final class AndroidFounderReadiness {
             s.presenceAuthenticated?"PRESENCE_AUTHENTICATED":"READY_TO_CONNECT";
         String authority=s.peerVerified?"PINNED_E2E_VERIFIED":
             s.presenceAuthenticated?"DIALOGUE_PROOF_REQUIRED":"NOT_CONNECTED";
+        String provider=s.chatGptReady?"CHATGPT_PLAN_READY":"CHATGPT_AUTH_OR_PLAN_REQUIRED";
 
         int ready=0,total=6;
         if(s.persistentEnabled)ready++;
@@ -70,8 +76,9 @@ final class AndroidFounderReadiness {
         else if(!s.pairingMaterial||!s.routeConfigured)overall="PAIRING_REQUIRED";
         else if(!s.presenceAuthenticated)overall="READY_FOR_CONNECTION";
         else if(!s.peerVerified)overall="DIALOGUE_VERIFICATION_REQUIRED";
-        else overall="CORE_REMOTE_READY";
+        else if(!s.chatGptReady)overall="CHATGPT_AUTH_REQUIRED";
+        else overall="FOUNDER_REMOTE_READY";
 
-        return new Report(install,connection,authority,optional,overall);
+        return new Report(install,connection,authority,provider,optional,overall);
     }
 }
