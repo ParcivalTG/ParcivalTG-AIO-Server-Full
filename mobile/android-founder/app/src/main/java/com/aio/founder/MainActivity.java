@@ -1570,7 +1570,7 @@ public class MainActivity extends Activity {
         }catch(Exception failure){notice("GPT projection held: "+safeCode(failure));}
     }
 
-    private String executeChatGptTool(String name,String arguments)throws Exception{
+    private ChatGptToolLoop.Execution executeChatGptTool(String name,String arguments)throws Exception{
         ChatGptAioToolContract.requireKnown(name);
         if(ChatGptAndroidToolContract.isTool(name))
             return executeChatGptAndroidTool(arguments);
@@ -1578,16 +1578,18 @@ public class MainActivity extends Activity {
         String instruction=ChatGptAioToolContract.parseInstruction(arguments);
         Session selected=session;
         if(selected==null||!selected.authenticated||!current(selected))
-            return new JSONObject().put("ok",false).put("error","WINDOWS_AIO_NOT_CONNECTED").toString();
+            return ChatGptToolLoop.Execution.text(
+                new JSONObject().put("ok",false).put("error","WINDOWS_AIO_NOT_CONNECTED").toString());
         try{
-            return submitChatGptWindowsObjective(selected,instruction);
+            return ChatGptToolLoop.Execution.text(submitChatGptWindowsObjective(selected,instruction));
         }catch(Exception failure){
             try{failSession(selected,failure);}catch(Exception ignored){}
-            return new JSONObject().put("ok",false).put("error",safeCode(failure)).toString();
+            return ChatGptToolLoop.Execution.text(
+                new JSONObject().put("ok",false).put("error",safeCode(failure)).toString());
         }
     }
 
-    private String executeChatGptAndroidTool(String arguments)throws Exception{
+    private ChatGptToolLoop.Execution executeChatGptAndroidTool(String arguments)throws Exception{
         ChatGptAndroidToolContract.Invocation invocation=ChatGptAndroidToolContract.parse(arguments);
         AndroidCapabilityDispatcher.Result result=null;
         UUID requestId=UUID.randomUUID();
@@ -1595,15 +1597,26 @@ public class MainActivity extends Activity {
             result=capabilityDispatcher.dispatch(
                 ChatGptAndroidToolContract.LOCAL_PEER_ID,requestId,invocation.payload);
             String reply=new String(result.payload,StandardCharsets.UTF_8);
-            if(reply.length()>120*1024){
+            JSONObject androidReply=new JSONObject(reply);
+            ChatGptResponsesContract.InputItem imageInput=null;
+
+            if(result.accepted&&"screen.capture".equals(invocation.action)){
+                JSONObject screen=androidReply.getJSONObject("result");
+                String contentB64=screen.getString("contentB64");
+                imageInput=ChatGptResponsesContract.jpegImage(contentB64);
+                screen.remove("contentB64");
+                screen.put("imageAttached",true);
+                screen.put("imageTransport","responses.input_image.data_url");
+            }else if(reply.length()>120*1024){
                 recordEvidence("CHATGPT_ANDROID_TOOL_OUTPUT_HELD",requestId.toString(),-1);
-                return new JSONObject()
+                return ChatGptToolLoop.Execution.text(new JSONObject()
                     .put("ok",false)
                     .put("error","CHATGPT_ANDROID_TOOL_OUTPUT_BUDGET")
                     .put("action",invocation.action)
                     .put("requestId",requestId.toString())
-                    .toString();
+                    .toString());
             }
+
             recordEvidence(
                 result.accepted?"CHATGPT_ANDROID_TOOL_ACCEPTED":"CHATGPT_ANDROID_TOOL_DENIED",
                 requestId.toString(),-1);
@@ -1615,8 +1628,10 @@ public class MainActivity extends Activity {
             out.put("code",result.code);
             out.put("manifestedDependencies",result.manifestedDependencies);
             out.put("totalDependencies",result.totalDependencies);
-            out.put("androidReply",new JSONObject(reply));
-            return out.toString();
+            out.put("androidReply",androidReply);
+            return imageInput==null?
+                ChatGptToolLoop.Execution.text(out.toString()):
+                new ChatGptToolLoop.Execution(out.toString(),List.of(imageInput));
         }finally{
             java.util.Arrays.fill(invocation.payload,(byte)0);
             if(result!=null&&result.payload!=null)java.util.Arrays.fill(result.payload,(byte)0);
