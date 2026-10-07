@@ -26,8 +26,10 @@ public class AndroidLocalNetworkPolicyTest {
 
     @Test public void permissionPolicyMatchesAndroidGeneration(){
         assertFalse(AndroidLocalNetworkPolicy.needsRuntimePermission(35,"192.168.1.2"));
-        assertTrue(AndroidLocalNetworkPolicy.needsRuntimePermission(36,"192.168.1.2"));
+        assertFalse(AndroidLocalNetworkPolicy.needsRuntimePermission(36,"192.168.1.2"));
         assertFalse(AndroidLocalNetworkPolicy.needsRuntimePermission(36,"8.8.8.8"));
+        assertTrue(AndroidLocalNetworkPolicy.needsRuntimePermission(37,"192.168.1.2"));
+        assertFalse(AndroidLocalNetworkPolicy.needsRuntimePermission(37,"8.8.8.8"));
         assertEquals("android.permission.NEARBY_WIFI_DEVICES",AndroidLocalNetworkPolicy.permissionName(36));
         assertEquals("android.permission.ACCESS_LOCAL_NETWORK",AndroidLocalNetworkPolicy.permissionName(37));
     }
