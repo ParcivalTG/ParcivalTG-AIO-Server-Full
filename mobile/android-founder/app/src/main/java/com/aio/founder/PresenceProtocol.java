@@ -19,6 +19,8 @@ public final class PresenceProtocol {
     public static final byte HELLO_REPLY = 0x02;
     public static final byte E2E = 0x10;
     public static final byte E2E_REPLY = 0x11;
+    public static final byte AUTHORITY_REFRESH = 0x12;
+    public static final byte AUTHORITY_REFRESH_REPLY = 0x13;
     public static final byte STATUS = 0x20;
     public static final byte STATUS_REPLY = 0x21;
     public static final byte PING = 0x30;
