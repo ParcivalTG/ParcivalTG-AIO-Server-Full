@@ -51,10 +51,22 @@ public class ChatGptProviderStateTest {
         assertEquals("gpt-b",state.snapshot().selectedModel);
     }
 
-    @Test public void identityWithoutPlanScopeRemainsSignedInButHeldForInference(){
+    @Test public void identityWithoutPlanScopeRemainsSignedInAndSkipsModelAdmission(){
         ChatGptProviderState state=new ChatGptProviderState();
-        state.authorized(session(false),List.of(new ChatGptResponsesContract.Model("gpt-a","A")));
-        assertEquals(ChatGptProviderState.Phase.SIGNED_IN_NO_PLAN,state.snapshot().phase);
-        assertFalse(state.snapshot().planUsageGranted);
+        state.authorized(session(false),List.of());
+        ChatGptProviderState.Snapshot snapshot=state.snapshot();
+        assertEquals(ChatGptProviderState.Phase.SIGNED_IN_NO_PLAN,snapshot.phase);
+        assertFalse(snapshot.planUsageGranted);
+        assertTrue(snapshot.models.isEmpty());
+        assertEquals("",snapshot.selectedModel);
+        assertEquals("CHATGPT_PLAN_USAGE_NOT_GRANTED",snapshot.lastCode);
+    }
+
+    @Test public void planAuthorizedEmptyCatalogFailsClosed(){
+        ChatGptProviderState state=new ChatGptProviderState();
+        try{state.authorized(session(true),List.of());fail();}
+        catch(IllegalArgumentException expected){
+            assertEquals("CHATGPT_MODEL_CATALOG_EMPTY",expected.getMessage());
+        }
     }
 }
