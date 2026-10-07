@@ -87,6 +87,8 @@ public class MainActivity extends Activity {
     private EditText textView;
     private Spinner privacyView, voiceModeView,chatGptModelView;
     private String draftText = "",chatGptStreamingText="";
+    private String lastGptScreenSha256="",lastGptActionFingerprint="";
+    private int sameGptActionCount;
     private int draftPrivacy;
     private JSONArray history = new JSONArray(), evidence = new JSONArray();
     private String historyRepresentation, evidenceRepresentation;
@@ -1521,6 +1523,7 @@ public class MainActivity extends Activity {
                 "When the Founder requests work that requires the Windows AIO/PC environment, use aio_windows_objective_submit. "+
                 "When the Founder requests inspection or action on this Android device, use aio_android_capability_invoke. "+
                 "Android actions are bounded typed capabilities and can be denied when the Founder has not granted that capability or a platform prerequisite is inactive. "+
+                "When a tool receipt sets reflectionRecommended=true, do not blindly repeat the same action; reconsider the hypothesis using the attached evidence before acting again. "+
                 "The Windows tool submits a bounded objective into AIO; it is not a shell. Treat only returned verified receipts as evidence, never as proof that downstream execution finished. "+
                 "Never claim a PC, Android, Git, build, test, or deployment effect unless supplied AIO evidence proves it.";
             ChatGptProviderRuntime.ToolExecutor manifestedTools=new ChatGptProviderRuntime.ToolExecutor(){
@@ -1609,6 +1612,10 @@ public class MainActivity extends Activity {
         ChatGptAndroidToolContract.Invocation invocation=ChatGptAndroidToolContract.parse(arguments);
         AndroidCapabilityProtocol.Request invocationRequest=
             AndroidCapabilityProtocol.parse(invocation.payload);
+        String beforeScreenSha=lastGptScreenSha256;
+        String fingerprint=invocation.action+"|"+ChatGptResponsesContract.canonical(invocationRequest.args);
+        if(fingerprint.equals(lastGptActionFingerprint))sameGptActionCount++;
+        else{lastGptActionFingerprint=fingerprint;sameGptActionCount=1;}
         AndroidCapabilityDispatcher.Result result=null;
         UUID requestId=UUID.randomUUID();
         try{
@@ -1620,6 +1627,7 @@ public class MainActivity extends Activity {
 
             if(result.accepted&&"screen.capture".equals(invocation.action)){
                 JSONObject screen=androidReply.getJSONObject("result");
+                if(screen.has("sha256"))lastGptScreenSha256=screen.getString("sha256");
                 if(screen.has("contentB64")){
                     String contentB64=screen.getString("contentB64");
                     imageInput=ChatGptResponsesContract.jpegImage(contentB64);
@@ -1654,9 +1662,16 @@ public class MainActivity extends Activity {
                 HindsightWitness witness=postActionHindsightWitness(invocation.action,duration);
                 if(witness!=null){
                     hindsight=witness.metadata;
+                    JSONObject witnessedScreen=witness.metadata.optJSONObject("screen");
+                    if(witnessedScreen!=null&&witnessedScreen.has("sha256"))
+                        lastGptScreenSha256=witnessedScreen.getString("sha256");
                     if(witness.image!=null)imageInput=witness.image;
                 }
             }
+
+            AioReflectionGate.Decision reflection=AioReflectionGate.evaluate(
+                invocation.action,result.accepted,result.code,
+                beforeScreenSha,lastGptScreenSha256,sameGptActionCount);
 
             recordEvidence(
                 result.accepted?"CHATGPT_ANDROID_TOOL_ACCEPTED":"CHATGPT_ANDROID_TOOL_DENIED",
@@ -1671,6 +1686,10 @@ public class MainActivity extends Activity {
             out.put("totalDependencies",result.totalDependencies);
             out.put("androidReply",androidReply);
             if(hindsight!=null)out.put("hindsightWitness",hindsight);
+            out.put("reflectionRecommended",reflection.recommended);
+            out.put("reflectionCode",reflection.code);
+            if(reflection.recommended)
+                recordEvidence("CHATGPT_ANDROID_REFLECTION_GATE",requestId.toString(),-1);
             return imageInput==null?
                 ChatGptToolLoop.Execution.text(out.toString()):
                 new ChatGptToolLoop.Execution(out.toString(),List.of(imageInput));
