@@ -9,8 +9,8 @@ android {
         minSdk 28
         targetSdk 36
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 7
-        versionName '0.7.0-candidate-r5'
+        versionCode 8
+        versionName '0.8.0-candidate-r5'
         buildConfigField 'String', 'GOOGLE_WEB_CLIENT_ID', '""'
         buildConfigField 'String', 'MICROSOFT_CLIENT_ID', '""'
         buildConfigField 'String', 'CHATGPT_CLIENT_ID', '""'
