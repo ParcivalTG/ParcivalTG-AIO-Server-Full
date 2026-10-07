@@ -22,6 +22,7 @@ public class ChatGptAndroidToolContractTest {
         try{
             assertEquals("resource.status",invocation.action);
             assertEquals(AioAndroidNode.Capability.RESOURCE_STATUS,invocation.capability);
+            assertTrue(AioProjectionQuantumCodec.looksLike(invocation.payload));
             AndroidCapabilityProtocol.Request request=AndroidCapabilityProtocol.parse(invocation.payload);
             assertEquals(AioAndroidNode.Capability.RESOURCE_STATUS,request.capability);
             assertEquals(AioAndroidNode.Privacy.FOUNDER_ONLY,request.privacy);
@@ -37,9 +38,30 @@ public class ChatGptAndroidToolContractTest {
             "{\"action\":\"gesture.tap\",\"args_json\":\"{\\\"x\\\":500,\\\"y\\\":250,\\\"durationMs\\\":80}\"}");
         try{
             assertEquals(AioAndroidNode.Capability.GESTURE_INPUT,invocation.capability);
+            assertTrue(AioProjectionQuantumCodec.looksLike(invocation.payload));
+            assertTrue(invocation.payload.length<32);
             AndroidCapabilityProtocol.Request request=AndroidCapabilityProtocol.parse(invocation.payload);
             assertEquals(500L,AndroidCapabilityProtocol.integer(request.args,"x",0,1000,0));
             assertEquals(250L,AndroidCapabilityProtocol.integer(request.args,"y",0,1000,0));
+        }finally{
+            java.util.Arrays.fill(invocation.payload,(byte)0);
+        }
+    }
+
+    @Test public void directPhaseProjectionAvoidsIntermediateCapabilityJson()throws Exception{
+        String providerArgs="{\"action\":\"gesture.tap\",\"args_json\":\"{\\\"x\\\":700,\\\"y\\\":300}\"}";
+        ChatGptAndroidToolContract.Invocation invocation=ChatGptAndroidToolContract.parse(providerArgs);
+        try{
+            assertTrue(AioProjectionQuantumCodec.looksLike(invocation.payload));
+            String conventional="{\"schema\":\""+AndroidCapabilityProtocol.REQUEST_SCHEMA+
+                "\",\"capability\":\"GESTURE_INPUT\",\"action\":\"gesture.tap\","+
+                "\"privacyClass\":\"FOUNDER_ONLY\",\"args\":{\"x\":700,\"y\":300}}";
+            assertTrue(invocation.payload.length*4<
+                conventional.getBytes(StandardCharsets.UTF_8).length);
+            AndroidCapabilityProtocol.Request decoded=
+                AndroidCapabilityProtocol.parse(invocation.payload);
+            assertEquals(700L,AndroidCapabilityProtocol.integer(decoded.args,"x",0,1000,0));
+            assertEquals(300L,AndroidCapabilityProtocol.integer(decoded.args,"y",0,1000,0));
         }finally{
             java.util.Arrays.fill(invocation.payload,(byte)0);
         }
