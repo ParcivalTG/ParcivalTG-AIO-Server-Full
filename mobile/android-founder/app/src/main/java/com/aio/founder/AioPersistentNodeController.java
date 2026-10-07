@@ -42,6 +42,17 @@ final class AioPersistentNodeController {
         context.startForegroundService(intent);
     }
 
+    static boolean restoreFromSystemEvent(Context context,String eventAction){
+        if(!founderEnabled(context))return false;
+        if(!Intent.ACTION_BOOT_COMPLETED.equals(eventAction) &&
+           !Intent.ACTION_MY_PACKAGE_REPLACED.equals(eventAction))
+            return false;
+        Intent intent=new Intent(context,AioPersistentNodeService.class)
+            .setAction(AioPersistentNodePolicy.ACTION_RESTORE);
+        context.startForegroundService(intent);
+        return true;
+    }
+
     static void stop(Context context){
         context.getSharedPreferences(AioPersistentNodePolicy.PREFS,Context.MODE_PRIVATE)
             .edit().putBoolean(AioPersistentNodePolicy.KEY_ENABLED,false).apply();
