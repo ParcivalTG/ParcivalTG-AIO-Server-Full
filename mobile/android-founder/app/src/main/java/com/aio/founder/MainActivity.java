@@ -510,7 +510,8 @@ public class MainActivity extends Activity {
             AndroidGestureController.available(),
             AioAppVisibility.isForegroundVisible(),
             presenceReady,
-            presenceReady&&peerIdentityVerified
+            presenceReady&&peerIdentityVerified,
+            chatGptReady()
         ));
     }
 
