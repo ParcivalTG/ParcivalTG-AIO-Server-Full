@@ -40,6 +40,9 @@ public final class AioPersistentNodeService extends Service {
         public boolean releaseCloudLink(CloudPresenceTransport expected){
             return AioPersistentNodeService.this.releaseExpectedCloudLink(expected,true,"FOUNDER_RELEASE");
         }
+        public boolean recoverCloudLink(CloudPresenceTransport expected,String reason){
+            return AioPersistentNodeService.this.recoverExpectedCloudLink(expected,reason);
+        }
         public boolean returnCloudLinkToActivity(CloudPresenceTransport expected){
             return AioPersistentNodeService.this.releaseExpectedCloudLink(expected,false,"FOUNDER_RETURN");
         }
@@ -172,15 +175,17 @@ public final class AioPersistentNodeService extends Service {
                 frame=cloud.pollNodeRequest(1000);
                 if(frame==null)continue;
                 long observedEpoch=cloud.remoteSessionEpoch();
-                if(observedEpoch!=adoptedRemoteSessionEpoch){
+                boolean remoteSessionChanged=observedEpoch!=adoptedRemoteSessionEpoch;
+                if(remoteSessionChanged){
                     adoptedRemoteSessionEpoch=observedEpoch;
                     authorityExpiresAtUnixMs=0;
                     try{state.linkAttached();}catch(Exception ignored){}
                     refreshFromState();
-                    refreshAuthorityIfNeeded("REMOTE_SESSION_CHANGED",true);
                 }
                 AndroidCapabilityDispatcher.Result result;
-                if(!state.remoteCapabilityEligible()){
+                if(remoteSessionChanged){
+                    result=deniedResult("UNVERIFIED","UNVERIFIED","REMOTE_SESSION_CHANGED_RECONNECT_REQUIRED");
+                }else if(!state.remoteCapabilityEligible()){
                     result=deniedResult("UNVERIFIED","UNVERIFIED","REMOTE_PEER_NOT_VERIFIED");
                 }else if(!auditReady||auditStore==null){
                     result=deniedResult("UNKNOWN","UNKNOWN","AUDIT_STATE_UNAVAILABLE");
@@ -213,6 +218,10 @@ public final class AioPersistentNodeService extends Service {
                 }
                 reply=result.payload;
                 cloud.sendNodeReply(frame.id,result.accepted,reply);
+                if(remoteSessionChanged){
+                    recoverExpectedCloudLink(cloud,"REMOTE_SESSION_CHANGED");
+                    break;
+                }
             }catch(Exception failure){
                 if(running&&isCurrentLink(cloud)){
                     try{state.linkLost();}catch(Exception ignored){}
@@ -336,6 +345,17 @@ public final class AioPersistentNodeService extends Service {
             if(expected==null||cloudLink!=expected)return false;
             releaseCloudLinkLocked(close,reason);return true;
         }
+    }
+
+    private boolean recoverExpectedCloudLink(CloudPresenceTransport expected,String reason){
+        boolean released;
+        synchronized(linkGate){
+            if(expected==null||cloudLink!=expected)return false;
+            releaseCloudLinkLocked(true,reason);
+            released=true;
+        }
+        if(released)scheduleReconnect(reason==null?"LINK_FAILURE":reason);
+        return true;
     }
 
     private void releaseCloudLink(boolean close,String reason){
