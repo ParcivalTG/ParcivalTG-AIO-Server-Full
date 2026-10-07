@@ -1600,8 +1600,15 @@ public class MainActivity extends Activity {
             result=capabilityDispatcher.dispatch(
                 ChatGptAndroidToolContract.LOCAL_PEER_ID,requestId,invocation.payload);
             String reply=new String(result.payload,StandardCharsets.UTF_8);
-            if(reply.length()>120*1024)
-                throw new IllegalArgumentException("CHATGPT_ANDROID_TOOL_OUTPUT_BUDGET");
+            if(reply.length()>120*1024){
+                recordEvidence("CHATGPT_ANDROID_TOOL_OUTPUT_HELD",requestId.toString(),-1);
+                return new JSONObject()
+                    .put("ok",false)
+                    .put("error","CHATGPT_ANDROID_TOOL_OUTPUT_BUDGET")
+                    .put("action",invocation.action)
+                    .put("requestId",requestId.toString())
+                    .toString();
+            }
             recordEvidence(
                 result.accepted?"CHATGPT_ANDROID_TOOL_ACCEPTED":"CHATGPT_ANDROID_TOOL_DENIED",
                 requestId.toString(),-1);
