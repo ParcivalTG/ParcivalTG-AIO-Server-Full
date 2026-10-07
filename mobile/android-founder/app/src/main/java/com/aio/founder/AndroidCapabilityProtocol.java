@@ -24,6 +24,8 @@ final class AndroidCapabilityProtocol {
     private AndroidCapabilityProtocol(){}
 
     static Request parse(byte[] payload)throws Exception{
+        if(AioProjectionQuantumCodec.looksLike(payload))
+            return AioProjectionQuantumCodec.decode(payload);
         StrictProjectionJson.ObjectValue root=StrictProjectionJson.object(payload,MAX_REQUEST_BYTES);
         if(!root.keySet().equals(TOP_KEYS))throw new IllegalArgumentException("ANDROID_CAPABILITY_KEYS");
         if(!REQUEST_SCHEMA.equals(string(root,"schema",96)))throw new IllegalArgumentException("ANDROID_CAPABILITY_SCHEMA");
