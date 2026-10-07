@@ -1607,6 +1607,8 @@ public class MainActivity extends Activity {
 
     private ChatGptToolLoop.Execution executeChatGptAndroidTool(String arguments)throws Exception{
         ChatGptAndroidToolContract.Invocation invocation=ChatGptAndroidToolContract.parse(arguments);
+        AndroidCapabilityProtocol.Request invocationRequest=
+            AndroidCapabilityProtocol.parse(invocation.payload);
         AndroidCapabilityDispatcher.Result result=null;
         UUID requestId=UUID.randomUUID();
         try{
@@ -1642,7 +1644,14 @@ public class MainActivity extends Activity {
             JSONObject hindsight=null;
             if(result.accepted&&("gesture.tap".equals(invocation.action)||
                                 "gesture.swipe".equals(invocation.action))){
-                HindsightWitness witness=postActionHindsightWitness(invocation.action);
+                long duration="gesture.swipe".equals(invocation.action)?
+                    AndroidCapabilityProtocol.integer(
+                        invocationRequest.args,"durationMs",
+                        AndroidGesturePolicy.MIN_DURATION_MS,AndroidGesturePolicy.MAX_DURATION_MS,350):
+                    AndroidCapabilityProtocol.integer(
+                        invocationRequest.args,"durationMs",
+                        AndroidGesturePolicy.MIN_DURATION_MS,AndroidGesturePolicy.MAX_DURATION_MS,80);
+                HindsightWitness witness=postActionHindsightWitness(invocation.action,duration);
                 if(witness!=null){
                     hindsight=witness.metadata;
                     if(witness.image!=null)imageInput=witness.image;
@@ -1679,8 +1688,8 @@ public class MainActivity extends Activity {
         }
     }
 
-    private HindsightWitness postActionHindsightWitness(String action){
-        long delay="gesture.swipe".equals(action)?520L:280L;
+    private HindsightWitness postActionHindsightWitness(String action,long durationMs){
+        long delay=AioPostActionObservationPolicy.delayMillis(action,durationMs);
         try{Thread.sleep(delay);}
         catch(InterruptedException interrupted){
             Thread.currentThread().interrupt();
