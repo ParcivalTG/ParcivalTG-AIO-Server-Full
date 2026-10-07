@@ -72,6 +72,51 @@ public class ChatGptProviderClientTest {
         }
     }
 
+    @Test public void preStreamAdmissionPreservesMachineReadableProviderCode()throws Exception{
+        try(MockWebServer server=new MockWebServer()){
+            server.enqueue(new MockResponse().setResponseCode(403)
+                .setHeader("Content-Type","application/json")
+                .setHeader("x-request-id","req_test")
+                .setBody("{\"error\":{\"code\":\"subscription_sharing_user_not_eligible\"}}"));
+            server.start();
+            ChatGptProviderClient client=new ChatGptProviderClient(
+                new ChatGptProviderClient.Endpoints(
+                    server.url("/token").toString(),
+                    server.url("/jwks").toString(),
+                    server.url("/models").toString(),
+                    server.url("/responses").toString()));
+            try{
+                client.respond("access-secret","gpt-a","AIO instructions",
+                    List.of(ChatGptResponsesContract.message("user","Continue")),delta->{});
+                fail();
+            }catch(java.io.IOException expected){
+                assertEquals("subscription_sharing_user_not_eligible",expected.getMessage());
+            }
+        }
+    }
+
+    @Test public void unknownPreStreamErrorFallsBackToHttpStatus()throws Exception{
+        try(MockWebServer server=new MockWebServer()){
+            server.enqueue(new MockResponse().setResponseCode(503)
+                .setHeader("Content-Type","text/plain")
+                .setBody("temporary"));
+            server.start();
+            ChatGptProviderClient client=new ChatGptProviderClient(
+                new ChatGptProviderClient.Endpoints(
+                    server.url("/token").toString(),
+                    server.url("/jwks").toString(),
+                    server.url("/models").toString(),
+                    server.url("/responses").toString()));
+            try{
+                client.respond("access-secret","gpt-a","AIO instructions",
+                    List.of(ChatGptResponsesContract.message("user","Continue")),delta->{});
+                fail();
+            }catch(java.io.IOException expected){
+                assertEquals("CHATGPT_HTTP_503",expected.getMessage());
+            }
+        }
+    }
+
     @Test public void missingCompletedEventFailsClosed()throws Exception{
         try(MockWebServer server=new MockWebServer()){
             server.enqueue(new MockResponse().setResponseCode(200)
