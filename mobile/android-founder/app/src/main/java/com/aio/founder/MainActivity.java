@@ -1398,8 +1398,11 @@ public class MainActivity extends Activity {
             String instructions="You are ChatGPT operating as an authorized intelligence provider inside AIO. "+
                 "AIO owns durable project memory, device authority, execution custody, and receipts. "+
                 "Continue coherently from the supplied AIO compatibility projection. "+
+                "When the Founder requests work that requires the Windows AIO/PC environment, use aio_windows_objective_submit. "+
+                "That tool submits a bounded objective into AIO; it is not a shell. Treat only its returned verified receipt as evidence of submission, never as proof that execution finished. "+
                 "Never claim a PC, Android, Git, build, test, or deployment effect unless supplied AIO evidence proves it.";
             chatGpt.respond(intentId,privacy,draftText,null,instructions,context.input,
+                (name,arguments)->executeChatGptTool(name,arguments),
                 new ChatGptProviderRuntime.Listener(){
                     @Override public void onDelta(String delta){
                         runOnUiThread(()->{
@@ -1443,6 +1446,73 @@ public class MainActivity extends Activity {
                     }
                 });
         }catch(Exception failure){notice("GPT projection held: "+safeCode(failure));}
+    }
+
+    private String executeChatGptTool(String name,String arguments)throws Exception{
+        ChatGptAioToolContract.requireKnown(name);
+        String instruction=ChatGptAioToolContract.parseInstruction(arguments);
+        Session selected=session;
+        if(selected==null||!selected.authenticated||!current(selected))
+            return new JSONObject().put("ok",false).put("error","WINDOWS_AIO_NOT_CONNECTED").toString();
+        try{
+            return submitChatGptWindowsObjective(selected,instruction);
+        }catch(Exception failure){
+            try{failSession(selected,failure);}catch(Exception ignored){}
+            return new JSONObject().put("ok",false).put("error",safeCode(failure)).toString();
+        }
+    }
+
+    private String submitChatGptWindowsObjective(Session selected,String instruction)throws Exception{
+        E2eCodec.Request request=null;byte[] command=null,plaintext=null;
+        UUID requestId=UUID.randomUUID();String toolIntentId=UUID.randomUUID().toString();
+        try{
+            if(!current(selected))throw new IOException("REQUEST_CANCELLED");
+            String lease=secrets.readText("lease");
+            byte[] witness=freshWitness(selected);
+            String witnessText;
+            try{witnessText=new String(witness,StandardCharsets.UTF_8);}
+            finally{Arrays.fill(witness,(byte)0);}
+            FounderDialogueSubmit submit=new FounderDialogueSubmit(
+                toolIntentId,instruction,"LOCAL_ONLY","AIO",lease,witnessText);
+            command=AioProjectionMembrane.projectIntentCommand(submit);
+            request=E2eCodec.encrypt(selected.pin,requestId.toString(),System.currentTimeMillis(),command);
+            appendHistoryProvider("ChatGPT Tool","ChatGPT",toolIntentId,"LOCAL_ONLY",
+                requestId.toString(),"TOOL_OUTBOUND_ATTEMPT",instruction);
+
+            selected.transport.setReadTimeoutMillis(15000);
+            long started=System.nanoTime();
+            PresenceProtocol.Frame response=exchange(selected,PresenceProtocol.E2E,
+                PresenceProtocol.E2E_REPLY,requestId,AioProjectionMembrane.projectEnvelope(request));
+            plaintext=request.context.decrypt(AioProjectionMembrane.absorbEncryptedResponse(response.payload));
+            JSONObject result=new JSONObject(new String(plaintext,StandardCharsets.UTF_8));
+            String schema=result.optString("schema");
+            if("aio.private-gateway.receipt.v1".equals(schema)){
+                if(!requestId.toString().equals(result.getString("requestId"))||
+                    !FounderIntentCapsule.ACTION.equals(result.getString("action")))
+                    throw new SecurityException("RECEIPT_CORRELATION_INVALID");
+            }else if(!"aio.private-gateway.error.v1".equals(schema)){
+                throw new SecurityException("RECEIPT_SCHEMA_INVALID");
+            }
+
+            long elapsed=(System.nanoTime()-started)/1_000_000L;
+            updateHistoryReceipt(toolIntentId,requestId.toString(),
+                response.flags==0?"VERIFIED_TOOL_RECEIPT":"VERIFIED_TOOL_REJECTION",result.toString());
+            recordEvidence(response.flags==0?"CHATGPT_TOOL_RECEIPT_VERIFIED":
+                "CHATGPT_TOOL_REJECTION_VERIFIED",requestId.toString(),elapsed);
+            if(response.flags==0)peerIdentityVerified=true;
+
+            JSONObject toolResult=new JSONObject();
+            toolResult.put("ok",response.flags==0);
+            toolResult.put("roundTripMs",elapsed);
+            toolResult.put("gatewayReceipt",result);
+            return toolResult.toString();
+        }finally{
+            if(request!=null)request.context.close();
+            if(command!=null)Arrays.fill(command,(byte)0);
+            if(plaintext!=null)Arrays.fill(plaintext,(byte)0);
+            try{if(current(selected)&&selected.transport!=null)selected.transport.setReadTimeoutMillis(7000);}
+            catch(Exception ignored){}
+        }
     }
 
     private void sendIntent(Session selected,FounderDialogueSubmit submit){
@@ -1529,7 +1599,12 @@ public class MainActivity extends Activity {
                 if(row!=null&&intentId.equals(row.optString("intentId"))&&requestId.equals(row.optString("requestId"))){
                     row.put("state",resultState);row.put("serverReceipt",receipt);
                     JSONObject r=new JSONObject(receipt);
-                    JSONObject binding=r.optJSONObject("objectiveBinding"); if(binding==null)binding=r;
+                    JSONObject binding=r.optJSONObject("objectiveBinding");
+                    if(binding==null){
+                        JSONObject result=r.optJSONObject("result");
+                        if(result!=null)binding=result.optJSONObject("objectiveBinding");
+                    }
+                    if(binding==null)binding=r;
                     if(binding.has("objectiveId"))row.put("objectiveId",binding.get("objectiveId"));
                     if(binding.has("objectiveVersion"))row.put("objectiveVersion",binding.get("objectiveVersion"));
                     if(binding.has("objectiveFingerprint"))row.put("objectiveFingerprint",binding.get("objectiveFingerprint"));
