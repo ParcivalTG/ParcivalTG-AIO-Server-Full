@@ -1,0 +1,174 @@
+{
+  "schema": "aio.android.capability.contract.v1",
+  "version": 1,
+  "transport": {
+    "requestFrameType": 64,
+    "replyFrameType": 65,
+    "requestSchema": "aio.android.capability.request.v1",
+    "replySchema": "aio.android.capability.reply.v1",
+    "maxRequestBytes": 65536,
+    "maxReplyBytes": 524288,
+    "correlation": "AIOP_GUID",
+    "grantBearerOnWire": false
+  },
+  "authority": {
+    "peerBound": true,
+    "grantCustody": "ANDROID_ENDPOINT_LOCAL",
+    "requiresCurrentR5SourceSession": true,
+    "requiresPinnedE2ePeerProof": true,
+    "requiresFounderGrant": true,
+    "requiresTypedReceipt": true
+  },
+  "actions": {
+    "RESOURCE_STATUS": [
+      "resource.status"
+    ],
+    "RESOURCE_CONTRIBUTE": [
+      "resource.sha256",
+      "resource.deflate"
+    ],
+    "SCREEN_OBSERVE": [
+      "screen.capture"
+    ],
+    "GESTURE_INPUT": [
+      "gesture.tap",
+      "gesture.swipe"
+    ],
+    "CLIPBOARD": [
+      "clipboard.read",
+      "clipboard.write"
+    ],
+    "NOTIFICATIONS": [
+      "notification.post"
+    ],
+    "FILE_READ": [
+      "file.list",
+      "file.read",
+      "file.sha256"
+    ],
+    "FILE_WRITE": [
+      "file.write",
+      "file.rename",
+      "file.delete"
+    ]
+  },
+  "nonRemoteActions": {
+    "PACKAGE_STAGE": "LOCAL_FOUNDER_ONLY"
+  },
+  "platformPrerequisites": {
+    "screen.capture": "FRESH_MEDIA_PROJECTION_SESSION",
+    "gesture.tap": "FOUNDER_ENABLED_ACCESSIBILITY_SERVICE",
+    "gesture.swipe": "FOUNDER_ENABLED_ACCESSIBILITY_SERVICE",
+    "clipboard.read": "AIO_ACTIVITY_FOREGROUND_VISIBLE",
+    "clipboard.write": "AIO_ACTIVITY_FOREGROUND_VISIBLE",
+    "notification.post": "POST_NOTIFICATIONS_PERMISSION_WHEN_REQUIRED",
+    "file.*": "FOUNDER_SELECTED_SAF_TREE",
+    "resource.*": "LIVE_RESOURCE_ADMISSION_WHEN_CONTRIBUTING"
+  },
+  "capabilities": {
+    "RESOURCE_STATUS": {
+      "tier": "OBSERVE",
+      "actions": [
+        "resource.status"
+      ],
+      "prerequisite": "NONE",
+      "defaultGrantMs": 900000,
+      "maxGrantMs": 1800000,
+      "biometric": false,
+      "remote": true
+    },
+    "RESOURCE_CONTRIBUTE": {
+      "tier": "DATA",
+      "actions": [
+        "resource.sha256",
+        "resource.deflate"
+      ],
+      "prerequisite": "LIVE_RESOURCE_ADMISSION",
+      "defaultGrantMs": 900000,
+      "maxGrantMs": 1800000,
+      "biometric": false,
+      "remote": true
+    },
+    "SCREEN_OBSERVE": {
+      "tier": "OBSERVE",
+      "actions": [
+        "screen.capture"
+      ],
+      "prerequisite": "FRESH_MEDIA_PROJECTION_SESSION",
+      "defaultGrantMs": 300000,
+      "maxGrantMs": 600000,
+      "biometric": true,
+      "remote": true
+    },
+    "GESTURE_INPUT": {
+      "tier": "INTERACT",
+      "actions": [
+        "gesture.tap",
+        "gesture.swipe"
+      ],
+      "prerequisite": "FOUNDER_ENABLED_ACCESSIBILITY_SERVICE",
+      "defaultGrantMs": 300000,
+      "maxGrantMs": 600000,
+      "biometric": true,
+      "remote": true
+    },
+    "CLIPBOARD": {
+      "tier": "DATA",
+      "actions": [
+        "clipboard.read",
+        "clipboard.write"
+      ],
+      "prerequisite": "AIO_ACTIVITY_FOREGROUND_VISIBLE",
+      "defaultGrantMs": 300000,
+      "maxGrantMs": 600000,
+      "biometric": true,
+      "remote": true
+    },
+    "NOTIFICATIONS": {
+      "tier": "INTERACT",
+      "actions": [
+        "notification.post"
+      ],
+      "prerequisite": "POST_NOTIFICATIONS_PERMISSION_WHEN_REQUIRED",
+      "defaultGrantMs": 900000,
+      "maxGrantMs": 1800000,
+      "biometric": false,
+      "remote": true
+    },
+    "FILE_READ": {
+      "tier": "DATA",
+      "actions": [
+        "file.list",
+        "file.read",
+        "file.sha256"
+      ],
+      "prerequisite": "FOUNDER_SELECTED_SAF_TREE",
+      "defaultGrantMs": 900000,
+      "maxGrantMs": 1800000,
+      "biometric": false,
+      "remote": true
+    },
+    "FILE_WRITE": {
+      "tier": "DATA",
+      "actions": [
+        "file.write",
+        "file.rename",
+        "file.delete"
+      ],
+      "prerequisite": "FOUNDER_SELECTED_SAF_TREE",
+      "defaultGrantMs": 300000,
+      "maxGrantMs": 600000,
+      "biometric": true,
+      "remote": true
+    },
+    "PACKAGE_STAGE": {
+      "tier": "UPDATE",
+      "actions": [],
+      "prerequisite": "LOCAL_FOUNDER_ONLY",
+      "defaultGrantMs": 0,
+      "maxGrantMs": 0,
+      "biometric": true,
+      "remote": false
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": "aio.founder.android.pairing.contract.v1",
+  "bundleSchema": "aio.founder.android.pairing.v1",
+  "version": 1,
+  "maxBytes": 65536,
+  "maxLifetimeMs": 3600000,
+  "futureClockSkewMs": 300000,
+  "rootFields": [
+    "schema",
+    "issuedAtUnixMs",
+    "expiresAtUnixMs",
+    "clientId",
+    "directEndpoint",
+    "witnessSecretB64",
+    "pinnedGatewaySpkiB64Url",
+    "signedLeaseJson",
+    "cloud"
+  ],
+  "cloudFields": [
+    "wssUrl",
+    "androidPeerId",
+    "windowsPeerId",
+    "peerAdmissionKeyB64",
+    "tunnelKeyB64"
+  ],
+  "rules": {
+    "directEndpoint": "OPTIONAL_IF_CLOUD_PRESENT",
+    "cloud": "OPTIONAL_IF_DIRECT_PRESENT",
+    "witnessSecret": "16_TO_128_BYTES_BASE64URL",
+    "cloudPeerAdmissionKey": "32_BYTES_BASE64",
+    "cloudTunnelKey": "32_BYTES_BASE64",
+    "r5MasterSecret": "MUST_NEVER_BE_PRESENT",
+    "lease": "GATEWAY_SIGNED_SHAPE_ANDROID_VALIDATES_GATEWAY_REVALIDATES",
+    "androidSecretCustody": "ANDROID_KEYSTORE_AES_GCM",
+    "import": "GENERATION_FENCED_FAIL_CLOSED"
+  }
+}

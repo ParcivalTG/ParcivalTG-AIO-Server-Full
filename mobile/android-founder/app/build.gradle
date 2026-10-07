@@ -1,0 +1,85 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.aio.founder'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.aio.founder'
+        minSdk 28
+        targetSdk 36
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        versionCode 7
+        versionName '0.7.0-candidate-r5'
+        buildConfigField 'String', 'GOOGLE_WEB_CLIENT_ID', '""'
+        buildConfigField 'String', 'MICROSOFT_CLIENT_ID', '""'
+        buildConfigField 'String', 'CHATGPT_CLIENT_ID', '""'
+        def signer = (System.getenv('AIO_ANDROID_SIGNER_SHA256') ?: '').replaceAll('[^0-9A-Fa-f]', '').toLowerCase()
+        buildConfigField 'String', 'EXPECTED_SIGNER_SHA256', '"'+signer+'"'
+    }
+
+    buildFeatures { buildConfig true }
+
+    sourceSets {
+        test.resources.srcDir '../../../config'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    def releaseKeystorePath = System.getenv('AIO_ANDROID_KEYSTORE_PATH')
+    signingConfigs {
+        if (releaseKeystorePath) {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword System.getenv('AIO_ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('AIO_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('AIO_ANDROID_KEY_PASSWORD')
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ''
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (releaseKeystorePath) signingConfig signingConfigs.release
+        }
+    }
+}
+
+tasks.register('verifyAioReleaseSigning') {
+    doLast {
+        def required = [
+            'AIO_ANDROID_KEYSTORE_PATH',
+            'AIO_ANDROID_KEYSTORE_PASSWORD',
+            'AIO_ANDROID_KEY_ALIAS',
+            'AIO_ANDROID_KEY_PASSWORD'
+        ]
+        def missing = required.findAll { !System.getenv(it) }
+        if (!missing.isEmpty()) throw new GradleException("AIO_RELEASE_SIGNING_MISSING:" + missing.join(','))
+        def keystore = file(System.getenv('AIO_ANDROID_KEYSTORE_PATH'))
+        if (!keystore.isFile()) throw new GradleException("AIO_RELEASE_KEYSTORE_NOT_FOUND")
+    }
+}
+tasks.matching { it.name == 'assembleRelease' }.configureEach { dependsOn tasks.named('verifyAioReleaseSigning') }
+
+dependencies {
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20260814'
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+    androidTestImplementation 'androidx.test:core:1.7.0'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+    androidTestImplementation 'androidx.test:rules:1.7.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
+}

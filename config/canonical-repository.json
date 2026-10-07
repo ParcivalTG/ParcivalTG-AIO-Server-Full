@@ -1,0 +1,16 @@
+{
+  "schema": "aio.canonical-repository.v1",
+  "owner": "ParcivalTG",
+  "repository": "AIO",
+  "fullRepository": "ParcivalTG/AIO",
+  "visibilityExpectation": "private",
+  "branch": "main",
+  "remoteUrl": "https://github.com/ParcivalTG/AIO.git",
+  "localWorkingTree": "C:\\AIO\\repository\\AIO",
+  "commitIdentity": "RESOLVE_FROM_GIT_HEAD_AND_VALIDATED_LOCAL_RECEIPT",
+  "historicalRepositories": ["ParcivalTG-MCServer-Full", "ParcivalTG-MCPlugin-Mirror", "ParcivalTG-AIO-Server-Full", "AIOCloud"],
+  "identityDriftPolicy": "FAIL_CLOSED",
+  "canonicalApplicationRelativePath": "windows-application",
+  "status": "MIGRATION_PENDING_VERIFICATION"
+}
+

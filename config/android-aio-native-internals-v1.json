@@ -1,0 +1,64 @@
+{
+  "schema": "aio.android.native-internals.v1",
+  "status": "CANONICAL_ARCHITECTURE_RULE",
+  "boundary": {
+    "androidFrameworkRole": "COMPATIBILITY_SHELL_ONLY",
+    "jsonRole": "EDGE_PROJECTION_ONLY",
+    "aioNativeStateRole": "AUTHORITATIVE_INTERNAL_SUBSTRATE"
+  },
+  "promotionRules": {
+    "bitExactRequired": true,
+    "fullStoredCostRequired": true,
+    "sameWorkloadEvidenceRequired": true,
+    "rawFallbackRequired": true,
+    "encryptedAtRestRequired": true,
+    "selectiveMaterializationPreferred": true,
+    "causalNonManifestationPreferred": true,
+    "unprovenSpecialistsMayNotBecomeDefault": true
+  },
+  "productionRepresentationPortfolio": [
+    "HFMS_HFR1_RESIDUAL",
+    "STRUCTURAL_DEFLATE",
+    "DEFLATE",
+    "STRUCTURAL",
+    "RUNLEN_CONTINUATION",
+    "REPEAT_GENERATOR",
+    "MOBIUS_MIRROR"
+  ],
+  "cellFabricKinds": [
+    "RAW",
+    "RUN_FIELD",
+    "WITNESS",
+    "MIRROR_WITNESS"
+  ],
+  "causalDependencyUniverse": [
+    "RESOURCE_SNAPSHOT",
+    "SCREEN_SESSION",
+    "GESTURE_SERVICE",
+    "FOREGROUND_VISIBILITY",
+    "NOTIFICATION_PERMISSION",
+    "SAF_TREE"
+  ],
+  "localReasoningRoutes": [
+    "RESOURCE",
+    "READINESS",
+    "CAPABILITIES",
+    "EVIDENCE",
+    "HISTORY",
+    "NATIVE_STATE",
+    "REMOTE"
+  ],
+  "durableState": {
+    "journal": "REVERSE_ADDRESSABLE_INDEPENDENTLY_SEALED_RECORDS",
+    "hotCache": "CELL_ADDRESSABLE_ESCAPE_RADIUS_PORTFOLIO",
+    "longTermMaterialization": "REQUESTED_CAUSAL_SUFFIX_ONLY",
+    "audit": "ATTEMPT_BEFORE_EFFECT_OUTCOME_AFTER_EFFECT"
+  },
+  "compatibilityPrinciples": [
+    "Do not force a specialist representation when it loses measured total cost.",
+    "Do not materialize unrelated Android subsystems for a typed action.",
+    "Do not send an exact phone-resident question to Windows when Android can answer it locally.",
+    "Do not equate synthetic-workload success with universal production fitness.",
+    "Preserve experimental mechanisms as selectable specialists when their workload sensor fires."
+  ]
+}

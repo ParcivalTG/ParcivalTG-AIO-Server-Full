@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aio.local/schemas/founder-fabric-v0.schema.json",
+  "title": "AIO Founder Fabric V0 Compatibility Shadow",
+  "description": "Edge compatibility schema only. Receivers must project into AIO-native internal representations.",
+  "type": "object",
+  "$defs": {
+    "privacyClass": {
+      "type": "string",
+      "enum": ["LOCAL_ONLY", "TRADE_SECRET_LOCAL_ONLY", "EXTERNAL_MINIMIZED", "EXTERNAL_ALLOWED"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ACCEPTED", "RUNNING", "PASS", "PARTIAL", "HOLD", "FAILED", "CANCELLED"]
+    },
+    "witnessFields": {
+      "type": "object",
+      "required": ["nonce", "witness"],
+      "properties": {
+        "nonce": {"type": "string", "minLength": 16, "maxLength": 256},
+        "witness": {"type": "string", "minLength": 16, "maxLength": 1024}
+      },
+      "additionalProperties": false
+    },
+    "founderIntent": {
+      "type": "object",
+      "required": [
+        "schema", "intentId", "principalId", "originDeviceId", "createdUnixMs",
+        "privacyClass", "target", "intentText", "authorityClass",
+        "causalParents", "contextRefs", "permittedProviders",
+        "expectedEvidence", "nonce", "witness"
+      ],
+      "properties": {
+        "schema": {"const": "aio.founder.intent.v0"},
+        "intentId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "principalId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "originDeviceId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "createdUnixMs": {"type": "integer", "minimum": 0},
+        "privacyClass": {"$ref": "#/$defs/privacyClass"},
+        "target": {"type": "string", "enum": ["AIO", "GPT", "AIO_GPT_SUPERVISED"]},
+        "intentText": {"type": "string", "minLength": 1, "maxLength": 262144},
+        "authorityClass": {"type": "string", "minLength": 1, "maxLength": 128},
+        "causalParents": {"type": "array", "items": {"type": "string"}, "maxItems": 1024},
+        "contextRefs": {"type": "array", "items": {"type": "string"}, "maxItems": 4096},
+        "permittedProviders": {"type": "array", "items": {"type": "string"}, "maxItems": 64},
+        "expectedEvidence": {"type": "array", "items": {"type": "string"}, "maxItems": 256},
+        "nonce": {"type": "string", "minLength": 16, "maxLength": 256},
+        "witness": {"type": "string", "minLength": 16, "maxLength": 1024}
+      },
+      "additionalProperties": false
+    },
+    "resultCapsule": {
+      "type": "object",
+      "required": [
+        "schema", "intentId", "resultId", "status", "producer", "summary",
+        "evidenceRefs", "artifacts", "nextAction", "privacyClass",
+        "completedUnixMs", "witness"
+      ],
+      "properties": {
+        "schema": {"const": "aio.founder.result.v0"},
+        "intentId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "resultId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "status": {"$ref": "#/$defs/status"},
+        "producer": {"type": "string", "minLength": 1, "maxLength": 256},
+        "summary": {"type": "string", "maxLength": 262144},
+        "evidenceRefs": {"type": "array", "items": {"type": "string"}, "maxItems": 4096},
+        "artifacts": {"type": "array", "items": {"type": "string"}, "maxItems": 4096},
+        "nextAction": {"type": ["string", "null"], "maxLength": 65536},
+        "privacyClass": {"$ref": "#/$defs/privacyClass"},
+        "completedUnixMs": {"type": "integer", "minimum": 0},
+        "witness": {"type": "string", "minLength": 16, "maxLength": 1024}
+      },
+      "additionalProperties": false
+    },
+    "capabilityAdvertisement": {
+      "type": "object",
+      "required": [
+        "schema", "deviceId", "platformProjection", "protocolVersion",
+        "capabilities", "authorityTier", "expiresUnixMs", "witness"
+      ],
+      "properties": {
+        "schema": {"const": "aio.device.capabilities.v0"},
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "platformProjection": {"type": "string", "minLength": 1, "maxLength": 64},
+        "protocolVersion": {"const": 0},
+        "capabilities": {"type": "array", "items": {"type": "string"}, "maxItems": 4096, "uniqueItems": true},
+        "authorityTier": {"type": "integer", "minimum": 0, "maximum": 4},
+        "resourceEnvelopeId": {"type": ["string", "null"], "maxLength": 128},
+        "expiresUnixMs": {"type": "integer", "minimum": 0},
+        "witness": {"type": "string", "minLength": 16, "maxLength": 1024}
+      },
+      "additionalProperties": false
+    },
+    "capabilityInvocation": {
+      "type": "object",
+      "required": [
+        "schema", "invocationId", "principalId", "deviceId", "capability",
+        "parameters", "authorityEnvelopeId", "createdUnixMs", "expiresUnixMs",
+        "nonce", "witness"
+      ],
+      "properties": {
+        "schema": {"const": "aio.capability.invoke.v0"},
+        "invocationId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "principalId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "capability": {"type": "string", "minLength": 1, "maxLength": 256},
+        "parameters": {"type": "object"},
+        "authorityEnvelopeId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "createdUnixMs": {"type": "integer", "minimum": 0},
+        "expiresUnixMs": {"type": "integer", "minimum": 0},
+        "nonce": {"type": "string", "minLength": 16, "maxLength": 256},
+        "witness": {"type": "string", "minLength": 16, "maxLength": 1024}
+      },
+      "additionalProperties": false
+    },
+    "resourceContributionEnvelope": {
+      "type": "object",
+      "required": [
+        "schema", "deviceId", "cpuCeilingFraction", "ramCeilingBytes",
+        "scratchCeilingBytes", "networkCeilingBytesPerSec", "acceleratorClasses",
+        "batteryPolicy", "thermalPolicy", "minimumLocalReserve",
+        "preemptionPolicy", "privacyClass", "validUntilUnixMs", "witness"
+      ],
+      "properties": {
+        "schema": {"const": "aio.resource.contribution.v0"},
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "cpuCeilingFraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "ramCeilingBytes": {"type": "integer", "minimum": 0},
+        "scratchCeilingBytes": {"type": "integer", "minimum": 0},
+        "networkCeilingBytesPerSec": {"type": "integer", "minimum": 0},
+        "acceleratorClasses": {"type": "array", "items": {"type": "string"}, "maxItems": 64},
+        "batteryPolicy": {"type": "string", "maxLength": 256},
+        "thermalPolicy": {"type": "string", "maxLength": 256},
+        "minimumLocalReserve": {"type": "number", "minimum": 0, "maximum": 1},
+        "preemptionPolicy": {"type": "string", "maxLength": 256},
+        "privacyClass": {"$ref": "#/$defs/privacyClass"},
+        "validUntilUnixMs": {"type": "integer", "minimum": 0},
+        "witness": {"type": "string", "minLength": 16, "maxLength": 1024}
+      },
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/founderIntent"},
+    {"$ref": "#/$defs/resultCapsule"},
+    {"$ref": "#/$defs/capabilityAdvertisement"},
+    {"$ref": "#/$defs/capabilityInvocation"},
+    {"$ref": "#/$defs/resourceContributionEnvelope"}
+  ]
+}

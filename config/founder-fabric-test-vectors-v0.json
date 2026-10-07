@@ -1,0 +1,77 @@
+{
+  "schema": "aio.founder-fabric.test-vectors.v0",
+  "status": "CANDIDATE_NOT_PROMOTED",
+  "notes": [
+    "These vectors are compatibility-shadow vectors, not AIO internal representation requirements.",
+    "No production secret appears in this file."
+  ],
+  "guid": {
+    "uuidText": "00112233-4455-6677-8899-aabbccddeeff",
+    "rfc4122BytesHex": "00112233445566778899AABBCCDDEEFF",
+    "dotNetGuidToByteArrayHex": "33221100554477668899AABBCCDDEEFF"
+  },
+  "presenceWitness": {
+    "schemaLabel": "AIO_PRESENCE_WITNESS_V0",
+    "clientId": "client",
+    "timestampUnixMs": 1700000000000,
+    "nonce": "nonce",
+    "testOnlySecretUtf8": "secret",
+    "canonicalUtf8": "AIO_PRESENCE_WITNESS_V0\nclient\n1700000000000\nnonce",
+    "hmac": "HMAC-SHA256",
+    "encoding": "base64url-without-padding",
+    "expectedSignature": "Rh0HMEz6tiptlSEkjZxOGg0F2NyxSP7rPoZmgvmPTRs"
+  },
+  "aiopFrame": {
+    "description": "V1 HELLO with UUID 00112233-4455-6677-8899-aabbccddeeff and one-byte ASCII x payload",
+    "magicAscii": "AIOP",
+    "version": 1,
+    "type": 1,
+    "flags": 0,
+    "reserved": 0,
+    "guidWireLayout": "dotNetGuidToByteArray",
+    "payloadLengthEncoding": "uint32-big-endian",
+    "payloadHex": "78",
+    "expectedFrameHex": "41494F500101000033221100554477668899AABBCCDDEEFF0000000178",
+    "expectedFrameBytes": 29
+  },
+  "privacy": [
+    {
+      "privacyClass": "LOCAL_ONLY",
+      "target": "GPT",
+      "expected": "DENY_BEFORE_PROVIDER_PROJECTION"
+    },
+    {
+      "privacyClass": "TRADE_SECRET_LOCAL_ONLY",
+      "target": "GPT",
+      "expected": "DENY_BEFORE_PROVIDER_PROJECTION"
+    },
+    {
+      "privacyClass": "EXTERNAL_MINIMIZED",
+      "target": "GPT",
+      "expected": "ALLOW_ONLY_MINIMIZED_APPROVED_PROJECTION"
+    }
+  ],
+  "contributionEnvelope": {
+    "valid": {
+      "schema": "aio.resource.contribution.v0",
+      "deviceId": "test-node",
+      "cpuCeilingFraction": 0.5,
+      "ramCeilingBytes": 1073741824,
+      "scratchCeilingBytes": 2147483648,
+      "networkCeilingBytesPerSec": 12500000,
+      "acceleratorClasses": [],
+      "batteryPolicy": "NO_BATTERY_CONSTRAINT_FOR_TEST",
+      "thermalPolicy": "HOLD_ON_THERMAL_LIMIT",
+      "minimumLocalReserve": 0.5,
+      "preemptionPolicy": "FOUNDER_PREEMPTS",
+      "privacyClass": "LOCAL_ONLY",
+      "validUntilUnixMs": 4102444800000,
+      "witness": "TEST_ONLY_WITNESS_NOT_VALID_FOR_AUTH"
+    },
+    "invalidCases": [
+      {"field": "cpuCeilingFraction", "value": 1.01, "expected": "SCHEMA_REJECT"},
+      {"field": "cpuCeilingFraction", "value": -0.01, "expected": "SCHEMA_REJECT"},
+      {"field": "minimumLocalReserve", "value": 1.01, "expected": "SCHEMA_REJECT"}
+    ]
+  }
+}
