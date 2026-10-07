@@ -236,7 +236,34 @@ final class ChatGptProviderClient {
 
     private static void requireSuccess(Response response)throws IOException{
         if(response.isSuccessful())return;
-        throw new IOException("CHATGPT_HTTP_"+response.code());
+        String providerCode=null;
+        ResponseBody body=response.body();
+        if(body!=null){
+            byte[] payload=null;
+            try{
+                payload=readBounded(body,64*1024);
+                StrictProjectionJson.ObjectValue root=StrictProjectionJson.object(payload,64*1024,32*1024);
+                Object error=root.get("error");
+                if(error instanceof StrictProjectionJson.ObjectValue){
+                    Object code=((StrictProjectionJson.ObjectValue)error).get("code");
+                    if(code instanceof String&&((String)code).matches("[A-Za-z0-9_.:-]{1,128}"))
+                        providerCode=(String)code;
+                }
+                if(providerCode==null){
+                    Object detail=root.get("detail");
+                    if(detail instanceof String){
+                        String normalized=((String)detail).trim()
+                            .replaceAll("[^A-Za-z0-9_.:-]+","_");
+                        if(normalized.matches("[A-Za-z0-9_.:-]{1,128}"))providerCode=normalized;
+                    }
+                }
+            }catch(Exception ignored){
+                // Status remains authoritative when a provider body is absent or changes shape.
+            }finally{
+                if(payload!=null)java.util.Arrays.fill(payload,(byte)0);
+            }
+        }
+        throw new IOException(providerCode==null?"CHATGPT_HTTP_"+response.code():providerCode);
     }
 
     private static byte[] readBounded(ResponseBody body,int maximum)throws IOException{
