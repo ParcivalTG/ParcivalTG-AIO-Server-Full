@@ -153,9 +153,16 @@ final class ChatGptProviderClient {
     ChatGptResponsesContract.Completion respond(String accessToken,String model,String instructions,
                                                 List<ChatGptResponsesContract.InputItem> input,
                                                 DeltaListener listener)throws Exception{
+        return respond(accessToken,model,instructions,input,List.of(),listener);
+    }
+
+    ChatGptResponsesContract.Completion respond(String accessToken,String model,String instructions,
+                                                List<ChatGptResponsesContract.InputItem> input,
+                                                List<ChatGptResponsesContract.FunctionTool> tools,
+                                                DeltaListener listener)throws Exception{
         if(listener==null)throw new IllegalArgumentException("CHATGPT_DELTA_LISTENER_REQUIRED");
         String bearer=bearer(accessToken);
-        byte[] payload=ChatGptResponsesContract.request(model,instructions,input);
+        byte[] payload=ChatGptResponsesContract.request(model,instructions,input,tools);
         RequestBody body=RequestBody.create(payload,JSON);
         Request request=new Request.Builder().url(endpoints.responses)
             .header("Authorization","Bearer "+bearer)
