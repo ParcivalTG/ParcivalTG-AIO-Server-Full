@@ -54,6 +54,7 @@ public final class AioPersistentNodeService extends Service {
     private ExecutorService linkWorker;
     private CloudPresenceTransport cloudLink;
     private long adoptedRemoteSessionEpoch;
+    private long authorityExpiresAtUnixMs;
     private int reconnectAttempt;
     private long reconnectGeneration;
     private boolean reconnectScheduled;
@@ -121,6 +122,7 @@ public final class AioPersistentNodeService extends Service {
     private void updateSnapshot(){
         if(!running)return;
         try{
+            refreshAuthorityIfNeeded("HEARTBEAT",false);
             AndroidResourceProjection.Snapshot resources=AndroidResourceProjection.capture(this);
             AioPersistentNodeState.Snapshot node=state.snapshot();
             current=new Snapshot(node.phase.name(),System.currentTimeMillis(),resources.summary());
@@ -154,6 +156,7 @@ public final class AioPersistentNodeService extends Service {
             reconnectGeneration++;reconnectScheduled=false;
             cloudLink=cloud;
             adoptedRemoteSessionEpoch=cloud.remoteSessionEpoch();
+            authorityExpiresAtUnixMs=storedAuthorityExpiry();
             state.linkAttached();refreshFromState();
             if(linkWorker==null||linkWorker.isShutdown())linkWorker=Executors.newSingleThreadExecutor();
             final CloudPresenceTransport adopted=cloud;
@@ -171,8 +174,10 @@ public final class AioPersistentNodeService extends Service {
                 long observedEpoch=cloud.remoteSessionEpoch();
                 if(observedEpoch!=adoptedRemoteSessionEpoch){
                     adoptedRemoteSessionEpoch=observedEpoch;
+                    authorityExpiresAtUnixMs=0;
                     try{state.linkAttached();}catch(Exception ignored){}
                     refreshFromState();
+                    refreshAuthorityIfNeeded("REMOTE_SESSION_CHANGED",true);
                 }
                 AndroidCapabilityDispatcher.Result result;
                 if(!state.remoteCapabilityEligible()){
@@ -256,14 +261,62 @@ public final class AioPersistentNodeService extends Service {
             rebuilt=AioPersistentCloudBootstrap.connect(this);
             reconnectAttempt=0;
             adoptCloudLink(rebuilt);
+            authorityExpiresAtUnixMs=storedAuthorityExpiry();
+            peerVerified(rebuilt);
             current=new Snapshot(state.snapshot().phase.name(),System.currentTimeMillis(),
-                "R5_RECONNECTED_UNVERIFIED:"+reason);
+                "R5_RECONNECTED_PINNED_E2E_VERIFIED:"+reason);
         }catch(Exception failure){
             if(rebuilt!=null)try{rebuilt.close();}catch(Exception ignored){}
             reconnectAttempt=Math.min(reconnectAttempt+1,1000);
             current=new Snapshot(state.snapshot().phase.name(),System.currentTimeMillis(),
                 "R5_RECONNECT_HOLD:"+failure.getClass().getSimpleName());
             scheduleReconnect("RETRY");
+        }
+    }
+
+    private long storedAuthorityExpiry(){
+        try{
+            String lease=new SecretStore(this).readText("lease");
+            return lease==null?0:AioProjectionMembrane.leaseExpiresAtUnixMs(lease);
+        }catch(Exception ignored){return 0;}
+    }
+
+    private void refreshAuthorityIfNeeded(String reason,boolean force){
+        final CloudPresenceTransport cloud;
+        final long knownExpiry;
+        synchronized(linkGate){
+            if(!running||cloudLink==null)return;
+            cloud=cloudLink;knownExpiry=authorityExpiresAtUnixMs;
+        }
+        long now=System.currentTimeMillis();
+        if(!force&&knownExpiry>now+PresenceAuthorityClient.REFRESH_WINDOW_MS)return;
+        try{
+            String pin=getSharedPreferences("aio_founder_connection_v1",MODE_PRIVATE)
+                .getString("pin","").trim();
+            PresenceAuthorityClient.Verified verified=
+                PresenceAuthorityClient.refreshAndVerify(cloud,pin,now);
+            new SecretStore(this).saveText("lease",verified.leaseJson);
+            synchronized(linkGate){
+                if(cloudLink!=cloud)return;
+                authorityExpiresAtUnixMs=verified.leaseExpiresAtUnixMs;
+                state.peerVerified();
+                current=new Snapshot(state.snapshot().phase.name(),System.currentTimeMillis(),
+                    "AUTHORITY_REFRESHED_PINNED_E2E:"+reason+
+                    ":ttl_ms="+Math.max(0,authorityExpiresAtUnixMs-System.currentTimeMillis()));
+            }
+        }catch(Exception failure){
+            synchronized(linkGate){
+                if(cloudLink!=cloud)return;
+                long expires=authorityExpiresAtUnixMs;
+                if(expires<=System.currentTimeMillis()){
+                    try{state.linkAttached();}catch(Exception ignored){}
+                    current=new Snapshot(state.snapshot().phase.name(),System.currentTimeMillis(),
+                        "AUTHORITY_EXPIRED_REFRESH_HOLD:"+failure.getClass().getSimpleName());
+                }else{
+                    current=new Snapshot(state.snapshot().phase.name(),System.currentTimeMillis(),
+                        "AUTHORITY_REFRESH_RETRY:"+failure.getClass().getSimpleName());
+                }
+            }
         }
     }
 
@@ -290,7 +343,7 @@ public final class AioPersistentNodeService extends Service {
     }
 
     private void releaseCloudLinkLocked(boolean close,String reason){
-        CloudPresenceTransport prior=cloudLink;cloudLink=null;adoptedRemoteSessionEpoch=0;
+        CloudPresenceTransport prior=cloudLink;cloudLink=null;adoptedRemoteSessionEpoch=0;authorityExpiresAtUnixMs=0;
         reconnectGeneration++;reconnectScheduled=false;
         ExecutorService link=linkWorker;linkWorker=null;if(link!=null)link.shutdownNow();
         if(prior!=null&&close)try{prior.close();}catch(Exception ignored){}
