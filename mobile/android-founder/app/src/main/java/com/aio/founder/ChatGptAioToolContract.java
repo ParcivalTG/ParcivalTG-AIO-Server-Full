@@ -33,11 +33,13 @@ final class ChatGptAioToolContract {
         StrictProjectionJson.ObjectValue root;
         try{root=StrictProjectionJson.object(bytes,16*1024,8*1024);}
         finally{java.util.Arrays.fill(bytes,(byte)0);}
-        if(root.size()!=1||!root.containsKey("instruction"))
-            throw new SecurityException("CHATGPT_TOOL_ARGUMENTS_FORBIDDEN");
+        if(!root.containsKey("instruction"))
+            throw new IllegalArgumentException("CHATGPT_TOOL_INSTRUCTION_INVALID");
         Object value=root.get("instruction");
         if(!(value instanceof String)||((String)value).isBlank()||((String)value).length()>4096)
             throw new IllegalArgumentException("CHATGPT_TOOL_INSTRUCTION_INVALID");
+        if(root.size()!=1)
+            throw new SecurityException("CHATGPT_TOOL_ARGUMENTS_FORBIDDEN");
         String instruction=((String)value).trim();
         if(instruction.indexOf('\0')>=0)
             throw new IllegalArgumentException("CHATGPT_TOOL_INSTRUCTION_INVALID");
