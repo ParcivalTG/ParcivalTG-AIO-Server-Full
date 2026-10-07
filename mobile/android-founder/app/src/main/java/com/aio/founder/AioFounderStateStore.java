@@ -41,7 +41,7 @@ final class AioFounderStateStore {
 
     synchronized void appendEvidence(JSONObject row)throws Exception{
         requireObject(row,"AIO_EVIDENCE_ROW_REQUIRED");
-        evidenceJournal.append(row.toString(),System.currentTimeMillis());
+        evidenceJournal.append(AioWitnessCellCodec.encode(row),System.currentTimeMillis());
     }
 
     synchronized JSONObject appendCapabilityAttempt(java.util.UUID requestId,String peerId,long sourceSessionEpoch,
@@ -108,7 +108,7 @@ final class AioFounderStateStore {
         if(limit<0||limit>HOT_EVIDENCE_ROWS)throw new IllegalArgumentException("AIO_EVIDENCE_TAIL_LIMIT");
         AioSelectiveJournal.TailResult tail=evidenceJournal.tail(limit);
         JSONArray out=new JSONArray();
-        for(AioSelectiveJournal.Entry entry:tail.entries)out.put(new JSONObject(entry.value));
+        for(AioSelectiveJournal.Entry entry:tail.entries)out.put(AioWitnessCellCodec.decode(entry.value));
         return out;
     }
 
@@ -164,7 +164,10 @@ final class AioFounderStateStore {
                 long timestamp=row.optLong(
                     "timestampUnixMs",
                     row.optLong("atUnixMs",System.currentTimeMillis()+i));
-                journal.append(row.toString(),Math.max(1,timestamp));
+                if("evidence".equals(name))
+                    journal.append(AioWitnessCellCodec.encode(row),Math.max(1,timestamp));
+                else
+                    journal.append(row.toString(),Math.max(1,timestamp));
             }
         }
         if(journal.countRecords()>=rows.length())legacy.removeText(name);
@@ -186,7 +189,10 @@ final class AioFounderStateStore {
 
     private static String lastRepresentation(AioSelectiveJournal.TailResult result){
         if(result.entries.isEmpty())return "EMPTY";
-        return result.entries.get(result.entries.size()-1).representation;
+        AioSelectiveJournal.Entry entry=result.entries.get(result.entries.size()-1);
+        if(AioWitnessCellCodec.isCell(entry.value))
+            return "WITNESS_CELL | storedChars="+entry.value.length()+" | "+entry.representation;
+        return entry.representation;
     }
 
     private static String percent(double fraction){
