@@ -23,7 +23,7 @@ final class ChatGptAioToolContract {
     }
 
     static List<ChatGptResponsesContract.FunctionTool> p0Tools(){
-        return List.of(windowsObjectiveTool());
+        return List.of(windowsObjectiveTool(),ChatGptAndroidToolContract.tool());
     }
 
     static String parseInstruction(String arguments)throws Exception{
@@ -47,7 +47,7 @@ final class ChatGptAioToolContract {
     }
 
     static void requireKnown(String name){
-        if(!WINDOWS_OBJECTIVE_TOOL.equals(name))
+        if(!WINDOWS_OBJECTIVE_TOOL.equals(name)&&!ChatGptAndroidToolContract.isTool(name))
             throw new SecurityException("CHATGPT_TOOL_NOT_ALLOWED");
     }
 }
