@@ -96,6 +96,8 @@ public final class AioPersistentNodeService extends Service {
         else state.stickyRestart(true);
         startNode();
         if(action==null)scheduleReconnect("PROCESS_RESTART");
+        else if(AioPersistentNodePolicy.ACTION_RESTORE.equals(action))
+            scheduleReconnect("SYSTEM_RESTORE");
         else if(AioPersistentNodePolicy.ACTION_START.equals(action)){
             ScheduledExecutorService active=worker;
             if(active!=null&&!active.isShutdown())
