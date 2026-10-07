@@ -17,6 +17,9 @@ final class ChatGptProviderRuntime implements AutoCloseable {
 
     interface ToolExecutor {
         ChatGptToolLoop.Execution execute(String name,String arguments)throws Exception;
+        default List<ChatGptResponsesContract.FunctionTool> tools(){
+            return ChatGptAioToolContract.p0Tools();
+        }
     }
 
     private final ChatGptSessionStore store;
@@ -152,7 +155,7 @@ final class ChatGptProviderRuntime implements AutoCloseable {
                 input.add(ChatGptResponsesContract.message("user",projected));
 
                 List<ChatGptResponsesContract.FunctionTool> tools=
-                    toolExecutor==null?List.of():ChatGptAioToolContract.p0Tools();
+                    toolExecutor==null?List.of():toolExecutor.tools();
 
                 for(int round=0;round<4;round++){
                     ChatGptResponsesContract.Completion completion=client.respond(
