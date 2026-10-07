@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="aio_gesture_service_description">Founder-enabled AIO gesture service for bounded, governed tap and swipe actions.</string>
+</resources>
