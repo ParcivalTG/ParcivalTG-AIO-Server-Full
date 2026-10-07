@@ -23,7 +23,7 @@ final class ChatGptLoopbackHttp {
 
     static String successResponse(){
         String body="<!doctype html><meta charset=\"utf-8\"><title>AIO</title>"+
-            "<body><p>Authorization returned to AIO. You can close this tab and return to AIO.</p></body>";
+            "<body><p>Authorization returned to AIO. Return to AIO and close this tab.</p></body>";
         byte[] bytes=body.getBytes(StandardCharsets.UTF_8);
         return "HTTP/1.1 200 OK\r\n"+
             "Content-Type: text/html; charset=utf-8\r\n"+
