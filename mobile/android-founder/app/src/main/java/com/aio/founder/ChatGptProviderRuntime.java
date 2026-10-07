@@ -154,10 +154,11 @@ final class ChatGptProviderRuntime implements AutoCloseable {
                     reasoning.replayTail(8),8,96*1024));
                 input.add(ChatGptResponsesContract.message("user",projected));
 
-                List<ChatGptResponsesContract.FunctionTool> tools=
-                    toolExecutor==null?List.of():toolExecutor.tools();
-
                 for(int round=0;round<4;round++){
+                    // Re-project the causal tool universe every round. A capability may
+                    // appear, expire, or be revoked as a consequence of the previous action.
+                    List<ChatGptResponsesContract.FunctionTool> tools=
+                        toolExecutor==null?List.of():toolExecutor.tools();
                     ChatGptResponsesContract.Completion completion=client.respond(
                         session.tokens.accessToken,snapshot.selectedModel,instructions,input,tools,target::onDelta);
                     reasoning.append(intentId,completion.reasoningItems);
