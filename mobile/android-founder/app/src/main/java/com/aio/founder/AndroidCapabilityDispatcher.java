@@ -48,11 +48,23 @@ final class AndroidCapabilityDispatcher {
 
     Result dispatch(String peerId,UUID requestId,byte[] payload){
         AndroidCapabilityProtocol.Request request=null;
+        try{
+            request=AndroidCapabilityProtocol.parse(payload);
+        }catch(Exception failure){
+            return denied(null,null,failure);
+        }
+        return dispatchProjected(peerId,requestId,request);
+    }
+
+    Result dispatchProjected(String peerId,UUID requestId,AndroidCapabilityProtocol.Request request){
         AioAndroidCausalPlanner.Prepared prepared=null;
         try{
             if(peerId==null||!peerId.matches("[A-Za-z0-9_.:-]{1,128}"))throw new SecurityException("ANDROID_PEER_INVALID");
             if(requestId==null)throw new SecurityException("ANDROID_REQUEST_ID_INVALID");
-            request=AndroidCapabilityProtocol.parse(payload);
+            if(request==null||request.capability==null||request.action==null||request.privacy==null||request.args==null)
+                throw new SecurityException("ANDROID_PROJECTED_REQUEST_INVALID");
+            if(!AndroidCapabilityCatalog.supports(request.capability,request.action))
+                throw new SecurityException("ANDROID_ACTION_UNSUPPORTED");
             node.authorizePeer(peerId,request.capability,request.action,request.privacy);
             prepared=AioAndroidCausalPlanner.prepare(context,files,request.action);
             String result=execute(request,prepared);
@@ -60,14 +72,19 @@ final class AndroidCapabilityDispatcher {
                 request.capability.name(),request.action,"OK",
                 prepared.manifestedDependencies(),prepared.totalDependencyUniverse);
         }catch(Exception failure){
-            String code=safeCode(failure);
-            return new Result(false,AndroidCapabilityProtocol.reply(false,code,null),
-                request==null?"UNPARSED":request.capability.name(),
-                request==null?"UNPARSED":request.action,
-                code,
-                prepared==null?0:prepared.manifestedDependencies(),
-                prepared==null?AioAndroidCausalPlanner.Dependency.values().length:prepared.totalDependencyUniverse);
+            return denied(request,prepared,failure);
         }
+    }
+
+    private Result denied(AndroidCapabilityProtocol.Request request,
+                          AioAndroidCausalPlanner.Prepared prepared,Exception failure){
+        String code=safeCode(failure);
+        return new Result(false,AndroidCapabilityProtocol.reply(false,code,null),
+            request==null?"UNPARSED":request.capability.name(),
+            request==null?"UNPARSED":request.action,
+            code,
+            prepared==null?0:prepared.manifestedDependencies(),
+            prepared==null?AioAndroidCausalPlanner.Dependency.values().length:prepared.totalDependencyUniverse);
     }
 
     private String execute(AndroidCapabilityProtocol.Request request,AioAndroidCausalPlanner.Prepared prepared)throws Exception{
