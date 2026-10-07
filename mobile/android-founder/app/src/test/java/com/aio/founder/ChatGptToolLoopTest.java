@@ -30,7 +30,7 @@ public class ChatGptToolLoopTest {
         ArrayList<ChatGptResponsesContract.InputItem> prior=new ArrayList<>();
         prior.add(ChatGptResponsesContract.message("user","Do the Windows work"));
         ChatGptToolLoop.Step step=ChatGptToolLoop.advance(prior,completion,
-            (name,args)->"{\"ok\":true,\"receipt\":\"verified\"}");
+            (name,args)->ChatGptToolLoop.Execution.text("{\"ok\":true,\"receipt\":\"verified\"}"));
 
         assertFalse(step.terminal);
         assertEquals(4,step.nextInput.size());
@@ -38,6 +38,28 @@ public class ChatGptToolLoopTest {
         assertTrue(step.nextInput.get(2).json().contains("\"type\":\"function_call\""));
         assertTrue(step.nextInput.get(3).json().contains("\"type\":\"function_call_output\""));
         assertTrue(step.nextInput.get(3).json().contains("\"call_id\":\"call_1\""));
+    }
+
+    @Test public void toolRoundMayAttachBoundedImageContinuation()throws Exception{
+        String fakeJpeg=java.util.Base64.getEncoder().encodeToString(
+            new byte[]{(byte)0xff,(byte)0xd8,(byte)0xff,0x00});
+        ChatGptResponsesContract.FunctionCall call=new ChatGptResponsesContract.FunctionCall(
+            "call_img","aio_android_capability_invoke",
+            "{\"action\":\"screen.capture\",\"args_json\":\"{}\"}",
+            "{\"type\":\"function_call\",\"call_id\":\"call_img\",\"name\":\"aio_android_capability_invoke\",\"arguments\":\"{\\\"action\\\":\\\"screen.capture\\\",\\\"args_json\\\":\\\"{}\\\"}\"}");
+        ChatGptResponsesContract.Completion completion=new ChatGptResponsesContract.Completion(
+            "",List.of(),List.of(call));
+        ChatGptToolLoop.Step step=ChatGptToolLoop.advance(
+            new ArrayList<>(List.of(ChatGptResponsesContract.message("user","Look at the screen"))),
+            completion,
+            (name,args)->new ChatGptToolLoop.Execution(
+                "{\"ok\":true,\"imageAttached\":true}",
+                List.of(ChatGptResponsesContract.jpegImage(fakeJpeg))));
+        assertFalse(step.terminal);
+        assertEquals(4,step.nextInput.size());
+        assertTrue(step.nextInput.get(2).json().contains("\"function_call_output\""));
+        assertTrue(step.nextInput.get(3).json().contains("\"input_image\""));
+        assertTrue(step.nextInput.get(3).json().contains("data:image/jpeg;base64,"));
     }
 
     @Test public void parallelAndUnknownToolsFailClosed()throws Exception{
@@ -49,7 +71,8 @@ public class ChatGptToolLoopTest {
             "{\"type\":\"function_call\",\"call_id\":\"call_b\",\"name\":\"aio_windows_objective_submit\",\"arguments\":\"{\\\"instruction\\\":\\\"b\\\"}\"}");
         try{
             ChatGptToolLoop.advance(new ArrayList<>(),
-                new ChatGptResponsesContract.Completion("",List.of(),List.of(a,b)),(n,x)->"{}");
+                new ChatGptResponsesContract.Completion("",List.of(),List.of(a,b)),
+                (n,x)->ChatGptToolLoop.Execution.text("{}"));
             fail();
         }catch(SecurityException expected){
             assertEquals("CHATGPT_PARALLEL_TOOL_CALL_DENIED",expected.getMessage());
@@ -60,7 +83,8 @@ public class ChatGptToolLoopTest {
             "{\"type\":\"function_call\",\"call_id\":\"call_x\",\"name\":\"raw_shell\",\"arguments\":\"{}\"}");
         try{
             ChatGptToolLoop.advance(new ArrayList<>(),
-                new ChatGptResponsesContract.Completion("",List.of(),List.of(unknown)),(n,x)->"{}");
+                new ChatGptResponsesContract.Completion("",List.of(),List.of(unknown)),
+                (n,x)->ChatGptToolLoop.Execution.text("{}"));
             fail();
         }catch(SecurityException expected){
             assertEquals("CHATGPT_TOOL_NOT_ALLOWED",expected.getMessage());
