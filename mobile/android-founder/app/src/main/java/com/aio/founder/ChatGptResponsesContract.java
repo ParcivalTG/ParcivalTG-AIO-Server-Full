@@ -14,12 +14,40 @@ final class ChatGptResponsesContract {
     private static final int MAX_EVENT_BYTES=512*1024;
     private static final int MAX_OUTPUT_CHARS=1_600_000;
     private static final int MAX_REASONING_ITEM_CHARS=256*1024;
+    private static final int MAX_FUNCTION_ITEM_CHARS=128*1024;
+    private static final int MAX_FUNCTION_ARGUMENT_CHARS=32*1024;
     private static final int MAX_INPUT_ITEMS=128;
     private static final Set<String> MESSAGE_ROLES=Set.of("user","assistant","developer");
 
     private ChatGptResponsesContract(){}
 
     interface InputItem { String json(); }
+
+    static final class FunctionTool {
+        final String name,description,parametersJson;
+        FunctionTool(String name,String description,String parametersJson){
+            if(name==null||!name.matches("[A-Za-z0-9_-]{1,64}"))
+                throw new IllegalArgumentException("CHATGPT_TOOL_NAME_INVALID");
+            if(description==null||description.isBlank()||description.length()>4096)
+                throw new IllegalArgumentException("CHATGPT_TOOL_DESCRIPTION_INVALID");
+            if(parametersJson==null||parametersJson.isBlank()||parametersJson.length()>32*1024)
+                throw new IllegalArgumentException("CHATGPT_TOOL_SCHEMA_INVALID");
+            this.name=name;this.description=description;this.parametersJson=parametersJson;
+        }
+        String json(){
+            return "{\"type\":\"function\",\"name\":\""+escape(name)+
+                "\",\"description\":\""+escape(description)+
+                "\",\"parameters\":"+parametersJson+",\"strict\":true}";
+        }
+    }
+
+    static final class FunctionCall {
+        final String callId,name,arguments,itemJson;
+        FunctionCall(String callId,String name,String arguments,String itemJson){
+            this.callId=callId;this.name=name;this.arguments=arguments;this.itemJson=itemJson;
+        }
+        InputItem asInput(){return new RawInput(itemJson);}
+    }
 
     static final class Model {
         final String slug,displayName;
@@ -29,8 +57,10 @@ final class ChatGptResponsesContract {
     static final class Completion {
         final String text;
         final List<String> reasoningItems;
-        Completion(String text,List<String> reasoningItems){
+        final List<FunctionCall> functionCalls;
+        Completion(String text,List<String> reasoningItems,List<FunctionCall> functionCalls){
             this.text=text;this.reasoningItems=List.copyOf(reasoningItems);
+            this.functionCalls=List.copyOf(functionCalls);
         }
     }
 
@@ -61,12 +91,26 @@ final class ChatGptResponsesContract {
         return new RawInput(canonical(root));
     }
 
+    static InputItem functionOutput(String callId,String output){
+        if(callId==null||!callId.matches("[A-Za-z0-9_.:-]{1,256}"))
+            throw new IllegalArgumentException("CHATGPT_FUNCTION_CALL_ID_INVALID");
+        if(output==null||output.isBlank()||output.length()>128*1024)
+            throw new IllegalArgumentException("CHATGPT_FUNCTION_OUTPUT_INVALID");
+        return new RawInput("{\"type\":\"function_call_output\",\"call_id\":\""+
+            escape(callId)+"\",\"output\":\""+escape(output)+"\"}");
+    }
+
     static byte[] request(String model,String instructions,List<InputItem> input){
+        return request(model,instructions,input,List.of());
+    }
+
+    static byte[] request(String model,String instructions,List<InputItem> input,List<FunctionTool> tools){
         String selected=bounded(model,128,"CHATGPT_MODEL_INVALID");
         if(!selected.matches("[A-Za-z0-9._:-]{1,128}"))throw new IllegalArgumentException("CHATGPT_MODEL_INVALID");
         String guidance=bounded(instructions,32*1024,"CHATGPT_INSTRUCTIONS_INVALID");
         if(input==null||input.isEmpty()||input.size()>MAX_INPUT_ITEMS)
             throw new IllegalArgumentException("CHATGPT_INPUT_COUNT_INVALID");
+        if(tools==null||tools.size()>16)throw new IllegalArgumentException("CHATGPT_TOOL_COUNT_INVALID");
 
         StringBuilder out=new StringBuilder();
         out.append("{\"model\":\"").append(escape(selected))
@@ -80,7 +124,17 @@ final class ChatGptResponsesContract {
             if(json==null||json.isBlank())throw new IllegalArgumentException("CHATGPT_INPUT_ITEM_INVALID");
             out.append(json);
         }
-        out.append("],\"store\":false,\"stream\":true}");
+        out.append(']');
+        if(!tools.isEmpty()){
+            out.append(",\"tools\":[");
+            for(int i=0;i<tools.size();i++){
+                if(tools.get(i)==null)throw new IllegalArgumentException("CHATGPT_TOOL_INVALID");
+                if(i>0)out.append(',');
+                out.append(tools.get(i).json());
+            }
+            out.append("],\"parallel_tool_calls\":false");
+        }
+        out.append(",\"store\":false,\"stream\":true}");
         byte[] encoded=out.toString().getBytes(StandardCharsets.UTF_8);
         if(encoded.length>MAX_REQUEST_BYTES){
             java.util.Arrays.fill(encoded,(byte)0);
@@ -113,6 +167,7 @@ final class ChatGptResponsesContract {
     static final class Stream {
         private final StringBuilder text=new StringBuilder();
         private final ArrayList<String> reasoningItems=new ArrayList<>();
+        private final ArrayList<FunctionCall> functionCalls=new ArrayList<>();
         private boolean completed,failed,incomplete,terminal;
         private String failureCode="unknown_error";
 
@@ -132,7 +187,7 @@ final class ChatGptResponsesContract {
                     text.append((String)delta);
                     return (String)delta;
                 case "response.output_item.done":
-                    captureReasoning(root.get("item"));
+                    captureItem(root.get("item"));
                     break;
                 case "response.completed":
                     completed=true;terminal=true;
@@ -153,20 +208,36 @@ final class ChatGptResponsesContract {
             if(failed)throw new IllegalStateException("CHATGPT_RESPONSE_FAILED:"+failureCode);
             if(incomplete)throw new IllegalStateException("CHATGPT_RESPONSE_INCOMPLETE");
             if(!completed)throw new IllegalStateException("CHATGPT_STREAM_INCOMPLETE");
-            return new Completion(text.toString(),reasoningItems);
+            return new Completion(text.toString(),reasoningItems,functionCalls);
         }
 
-        private void captureReasoning(Object value){
+        private void captureItem(Object value){
             if(!(value instanceof StrictProjectionJson.ObjectValue))return;
             StrictProjectionJson.ObjectValue item=(StrictProjectionJson.ObjectValue)value;
-            if(!"reasoning".equals(item.get("type")))return;
-            Object encrypted=item.get("encrypted_content");
-            if(!(encrypted instanceof String)||((String)encrypted).isBlank())return;
-            if(reasoningItems.size()>=64)throw new IllegalArgumentException("CHATGPT_REASONING_ITEM_COUNT");
-            String encoded=canonical(item);
-            if(encoded.length()>MAX_REASONING_ITEM_CHARS)
-                throw new IllegalArgumentException("CHATGPT_REASONING_ITEM_BUDGET");
-            reasoningItems.add(encoded);
+            Object type=item.get("type");
+            if("reasoning".equals(type)){
+                Object encrypted=item.get("encrypted_content");
+                if(!(encrypted instanceof String)||((String)encrypted).isBlank())return;
+                if(reasoningItems.size()>=64)throw new IllegalArgumentException("CHATGPT_REASONING_ITEM_COUNT");
+                String encoded=canonical(item);
+                if(encoded.length()>MAX_REASONING_ITEM_CHARS)
+                    throw new IllegalArgumentException("CHATGPT_REASONING_ITEM_BUDGET");
+                reasoningItems.add(encoded);
+                return;
+            }
+            if("function_call".equals(type)){
+                Object callId=item.get("call_id"),name=item.get("name"),arguments=item.get("arguments");
+                if(!(callId instanceof String)||!(name instanceof String)||!(arguments instanceof String)||
+                    !((String)callId).matches("[A-Za-z0-9_.:-]{1,256}")||
+                    !((String)name).matches("[A-Za-z0-9_-]{1,64}")||
+                    ((String)arguments).length()>MAX_FUNCTION_ARGUMENT_CHARS)
+                    throw new IllegalArgumentException("CHATGPT_FUNCTION_CALL_INVALID");
+                if(functionCalls.size()>=4)throw new IllegalArgumentException("CHATGPT_FUNCTION_CALL_COUNT");
+                String encoded=canonical(item);
+                if(encoded.length()>MAX_FUNCTION_ITEM_CHARS)
+                    throw new IllegalArgumentException("CHATGPT_FUNCTION_CALL_INVALID");
+                functionCalls.add(new FunctionCall((String)callId,(String)name,(String)arguments,encoded));
+            }
         }
 
         private static String extractFailureCode(StrictProjectionJson.ObjectValue root){
@@ -188,7 +259,7 @@ final class ChatGptResponsesContract {
         return value;
     }
 
-    private static String canonical(Object value){
+    static String canonical(Object value){
         if(value==null)return "null";
         if(value instanceof String)return "\""+escape((String)value)+"\"";
         if(value instanceof Boolean||value instanceof Long||value instanceof BigDecimal)return value.toString();
