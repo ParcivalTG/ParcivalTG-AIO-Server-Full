@@ -42,6 +42,10 @@ final class AioProjectionMembrane {
     }
 
     static void validateLeaseImport(String leaseText, long now) throws Exception {
+        validateLeaseCapabilities(leaseText,now,FounderIntentCapsule.ACTION);
+    }
+
+    static void validateLeaseCapabilities(String leaseText,long now,String... required) throws Exception {
         if (leaseText == null || leaseText.length() > 32_768) throw new SecurityException("LEASE_IMPORT_BUDGET");
         JSONObject lease = new JSONObject(leaseText);
         if (!"aio.private-gateway.lease.v1".equals(lease.getString("schema")))
@@ -49,14 +53,56 @@ final class AioProjectionMembrane {
         if (lease.getString("leaseId").isEmpty() || lease.getString("principalId").isEmpty()
                 || lease.getString("signature").isEmpty() || lease.getInt("maxUses") < 1)
             throw new SecurityException("LEASE_IMPORT_INCOMPLETE");
-        boolean permitted = false;
         JSONArray capabilities = lease.getJSONArray("capabilities");
-        for (int i = 0; i < capabilities.length(); i++)
-            if (FounderIntentCapsule.ACTION.equals(capabilities.getString(i))) permitted = true;
-        if (!permitted) throw new SecurityException("INTENT_CAPABILITY_NOT_GRANTED");
+        for(String need:required){
+            boolean permitted=false;
+            for(int i=0;i<capabilities.length();i++)
+                if(need.equals(capabilities.getString(i)))permitted=true;
+            if(!permitted)throw new SecurityException("CAPABILITY_NOT_GRANTED:"+need);
+        }
         if (OffsetDateTime.parse(lease.getString("expiresAt")).toInstant().toEpochMilli() <= now)
             throw new SecurityException("LEASE_EXPIRED");
         // Only the gateway verifies its signature, revocation, principal binding, and remaining uses.
+    }
+
+    static long leaseExpiresAtUnixMs(String leaseText) throws Exception {
+        if(leaseText==null||leaseText.length()>32_768)throw new SecurityException("LEASE_IMPORT_BUDGET");
+        JSONObject lease=new JSONObject(leaseText);
+        if(!"aio.private-gateway.lease.v1".equals(lease.getString("schema")))
+            throw new SecurityException("LEASE_SCHEMA_INVALID");
+        return OffsetDateTime.parse(lease.getString("expiresAt")).toInstant().toEpochMilli();
+    }
+
+    static String absorbAuthorityLease(PresenceProtocol.Frame frame,long now) throws Exception {
+        if(frame.flags!=0)throw new SecurityException("AUTHORITY_REFRESH_REJECTED");
+        JSONObject root=new JSONObject(new String(frame.payload,StandardCharsets.UTF_8));
+        if(!"aio.presence.authority.refresh.reply.v1".equals(root.getString("schema")))
+            throw new SecurityException("AUTHORITY_REFRESH_SCHEMA_INVALID");
+        JSONObject lease=root.getJSONObject("lease");
+        String encoded=lease.toString();
+        validateLeaseCapabilities(encoded,now,"gateway.status",FounderIntentCapsule.ACTION);
+        return encoded;
+    }
+
+    static byte[] projectGatewayStatusCommand(String leaseText,long now) throws Exception {
+        validateLeaseCapabilities(leaseText,now,"gateway.status");
+        JSONObject command=new JSONObject();
+        command.put("action","gateway.status");
+        command.put("args",new JSONObject());
+        command.put("lease",new JSONObject(leaseText));
+        return command.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    static void validateGatewayStatusReceipt(JSONObject receipt,String requestId) throws Exception {
+        if(!"aio.private-gateway.receipt.v1".equals(receipt.getString("schema"))||
+           !requestId.equals(receipt.getString("requestId"))||
+           !"gateway.status".equals(receipt.getString("action"))||
+           !receipt.getBoolean("success"))
+            throw new SecurityException("GATEWAY_STATUS_RECEIPT_INVALID");
+        JSONObject result=receipt.getJSONObject("result");
+        if(!"READY".equals(result.getString("status"))||
+           !"aio.private-gateway.v1".equals(result.getString("schema")))
+            throw new SecurityException("GATEWAY_STATUS_RESULT_INVALID");
     }
 
     static byte[] projectIntentCommand(FounderDialogueSubmit submit) throws Exception {
