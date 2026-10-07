@@ -16,7 +16,7 @@ final class ChatGptProviderRuntime implements AutoCloseable {
     }
 
     interface ToolExecutor {
-        String execute(String name,String arguments)throws Exception;
+        ChatGptToolLoop.Execution execute(String name,String arguments)throws Exception;
     }
 
     private final ChatGptSessionStore store;
