@@ -61,7 +61,8 @@ final class ChatGptProviderRuntime implements AutoCloseable {
             @Override public void onAuthorized(ChatGptSessionCodec.Session session){
                 worker.execute(()->{
                     try{
-                        List<ChatGptResponsesContract.Model> models=client.models(session.tokens.accessToken);
+                        List<ChatGptResponsesContract.Model> models=session.tokens.planUsageGranted
+                            ?client.models(session.tokens.accessToken):List.of();
                         state.authorized(session,models);
                         target.onState(state.snapshot());publishState();
                     }catch(Exception failure){
@@ -115,7 +116,8 @@ final class ChatGptProviderRuntime implements AutoCloseable {
         worker.execute(()->{
             try{
                 ChatGptSessionCodec.Session session=ensureAccess();
-                List<ChatGptResponsesContract.Model> models=client.models(session.tokens.accessToken);
+                List<ChatGptResponsesContract.Model> models=session.tokens.planUsageGranted
+                    ?client.models(session.tokens.accessToken):List.of();
                 state.authorized(session,models);target.onState(state.snapshot());publishState();
             }catch(Exception failure){
                 state.hold(safeCode(failure));target.onState(state.snapshot());publishState();target.onFailure(safeCode(failure));publishFailure(safeCode(failure));
@@ -182,7 +184,8 @@ final class ChatGptProviderRuntime implements AutoCloseable {
         if(closed)return;
         try{
             ChatGptSessionCodec.Session session=ensureAccess();
-            List<ChatGptResponsesContract.Model> models=client.models(session.tokens.accessToken);
+            List<ChatGptResponsesContract.Model> models=session.tokens.planUsageGranted
+                ?client.models(session.tokens.accessToken):List.of();
             state.authorized(session,models);publishState();
         }catch(IllegalStateException noSession){
             if("CHATGPT_SIGNED_OUT".equals(noSession.getMessage()))state.signedOut();
