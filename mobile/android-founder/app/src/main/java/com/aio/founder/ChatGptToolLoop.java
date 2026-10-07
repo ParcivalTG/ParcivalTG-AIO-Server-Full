@@ -4,8 +4,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class ChatGptToolLoop {
+    static final class Execution {
+        final String output;
+        final List<ChatGptResponsesContract.InputItem> continuationInputs;
+        Execution(String output,List<ChatGptResponsesContract.InputItem> continuationInputs){
+            this.output=output;
+            this.continuationInputs=continuationInputs==null?List.of():List.copyOf(continuationInputs);
+        }
+        static Execution text(String output){return new Execution(output,List.of());}
+    }
+
     interface Executor {
-        String execute(String name,String arguments)throws Exception;
+        Execution execute(String name,String arguments)throws Exception;
     }
 
     static final class Step {
@@ -38,10 +48,16 @@ final class ChatGptToolLoop {
             next.add(ChatGptResponsesContract.reasoning(item));
         next.add(call.asInput());
 
-        String output=executor.execute(call.name,call.arguments);
-        if(output==null||output.isBlank()||output.length()>128*1024)
+        Execution execution=executor.execute(call.name,call.arguments);
+        if(execution==null||execution.output==null||execution.output.isBlank()||
+           execution.output.length()>128*1024)
             throw new IllegalArgumentException("CHATGPT_FUNCTION_OUTPUT_INVALID");
-        next.add(ChatGptResponsesContract.functionOutput(call.callId,output));
+        next.add(ChatGptResponsesContract.functionOutput(call.callId,execution.output));
+        for(ChatGptResponsesContract.InputItem item:execution.continuationInputs){
+            if(item==null||item.json()==null||item.json().isBlank())
+                throw new IllegalArgumentException("CHATGPT_TOOL_CONTINUATION_INVALID");
+            next.add(item);
+        }
 
         if(next.size()>128)throw new IllegalArgumentException("CHATGPT_INPUT_COUNT_INVALID");
         return new Step(false,null,List.copyOf(next));
