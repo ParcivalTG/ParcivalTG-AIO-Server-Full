@@ -16,8 +16,10 @@ final class AioPersistentCloudBootstrap {
         String peer=configuration.getString("cloud_peer","").trim();
         String target=configuration.getString("cloud_target","").trim();
         String client=configuration.getString("client","").trim();
+        String pin=configuration.getString("pin","").trim();
         if(!wss.startsWith("wss://")||!peer.matches("[A-Za-z0-9_.:-]{1,128}")||
-            !target.matches("[A-Za-z0-9_.:-]{1,128}")||!client.matches("[A-Za-z0-9_.-]{1,128}"))
+            !target.matches("[A-Za-z0-9_.:-]{1,128}")||!client.matches("[A-Za-z0-9_.-]{1,128}")||
+            pin.isEmpty())
             throw new IllegalStateException("PERSISTENT_CLOUD_NOT_CONFIGURED");
 
         SecretStore secrets=new SecretStore(context);
@@ -53,6 +55,10 @@ final class AioPersistentCloudBootstrap {
             AioProjectionMembrane.absorbHello(field,ready.hello);
             AioProjectionMembrane.absorbStatus(field,ready.status,ready.pingRoundTripMs);
             if(!field.projectAndroidShadow().ready)throw new IllegalStateException("PC_CORE_NOT_READY");
+
+            PresenceAuthorityClient.Verified verified=
+                PresenceAuthorityClient.refreshAndVerify(cloud,pin,System.currentTimeMillis());
+            secrets.saveText("lease",verified.leaseJson);
             return cloud;
         }catch(Exception failure){
             if(cloud!=null)try{cloud.close();}catch(Exception ignored){}
