@@ -22,4 +22,10 @@ final class AndroidScreenProjectionRuntime {
         if(active==null)throw new IllegalStateException("SCREEN_CAPTURE_NOT_ACTIVE");
         return active.captureJpegInternal(quality,maxBytes);
     }
+
+    static synchronized byte[] captureJpeg(
+            int quality,int maxBytes,AndroidRemoteScreenPolicy.Region region)throws Exception{
+        if(active==null)throw new IllegalStateException("SCREEN_CAPTURE_NOT_ACTIVE");
+        return active.captureJpegInternal(quality,maxBytes,region);
+    }
 }
