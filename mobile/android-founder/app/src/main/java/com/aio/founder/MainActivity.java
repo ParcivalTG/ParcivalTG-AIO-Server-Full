@@ -734,6 +734,23 @@ public class MainActivity extends Activity {
         revokeRemote.setOnClickListener(v -> revokeAndroidGrants());
         sensitiveRow.addView(revokeRemote,new LinearLayout.LayoutParams(0,dp(54),1));
         body.addView(sensitiveRow);
+
+        int gptAndroidGrants=androidNode.activeGrantCount(ChatGptAndroidToolContract.LOCAL_PEER_ID);
+        body.addView(text("CHATGPT LOCAL ANDROID AUTHORITY\n"+
+            (chatGptReady()?"Provider ready for explicit local capability grants":
+                "Continue with ChatGPT before granting local Android authority")+
+            "\nActive ChatGPT-local grants: "+gptAndroidGrants+
+            "\nOnly currently available platform capabilities are included; unavailable prerequisites stay denied.",14));
+        LinearLayout gptAndroidRow=new LinearLayout(this);
+        Button grantGptAndroid=button("Grant GPT Android control - 5 min");
+        grantGptAndroid.setEnabled(chatGptReady());
+        grantGptAndroid.setOnClickListener(v -> grantChatGptAndroidControl());
+        gptAndroidRow.addView(grantGptAndroid,new LinearLayout.LayoutParams(0,dp(54),1));
+        Button revokeGptAndroid=button("Revoke GPT Android grants");
+        revokeGptAndroid.setEnabled(gptAndroidGrants>0);
+        revokeGptAndroid.setOnClickListener(v -> revokeChatGptAndroidGrants());
+        gptAndroidRow.addView(revokeGptAndroid,new LinearLayout.LayoutParams(0,dp(54),1));
+        body.addView(gptAndroidRow);
     }
     private void installStagedUpdate(){
         if(updateStager.peek()==null){notice("Update held: UPDATE_NOT_STAGED");return;}
@@ -803,6 +820,63 @@ public class MainActivity extends Activity {
             androidNode.revokePeerCapability(peer,capability);
         recordEvidence("ANDROID_REMOTE_GRANTS_REVOKED",null,-1);
         lastLocalEvent="Android remote grants revoked for configured Windows peer";
+        showSurface();
+    }
+
+    private void grantChatGptAndroidControl(){
+        if(!chatGptReady()){notice("GPT Android grant held: CHATGPT_PROVIDER_NOT_READY");return;}
+        AioBiometricGate.authenticate(this,"Authorize ChatGPT Android control",new AioBiometricGate.Callback(){
+            @Override public void onAccepted(){
+                try{
+                    final String peer=ChatGptAndroidToolContract.LOCAL_PEER_ID;
+                    final long ttl=5*60_000L;
+                    int granted=0;
+                    AndroidScreenProjectionService.Snapshot screen=
+                        screenProjectionBinder==null?null:screenProjectionBinder.snapshot();
+                    boolean notificationsReady=android.os.Build.VERSION.SDK_INT<33||
+                        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)==
+                            android.content.pm.PackageManager.PERMISSION_GRANTED;
+                    boolean filesReady=capabilityBroker!=null&&capabilityBroker.hasStorageGrant();
+                    boolean foreground=AioAppVisibility.isForegroundVisible();
+                    boolean gestures=AndroidGestureController.available();
+
+                    for(AioAndroidNode.Capability capability:AndroidCapabilityCatalog.remoteCapabilities()){
+                        boolean available;
+                        switch(capability){
+                            case SCREEN_OBSERVE: available=screen!=null&&"ACTIVE".equals(screen.state);break;
+                            case GESTURE_INPUT: available=gestures;break;
+                            case FILE_READ:
+                            case FILE_WRITE: available=filesReady;break;
+                            case CLIPBOARD: available=foreground;break;
+                            case NOTIFICATIONS: available=notificationsReady;break;
+                            case RESOURCE_CONTRIBUTE:
+                                AndroidResourceProjection.Snapshot resources=AndroidResourceProjection.capture(MainActivity.this);
+                                available="ELIGIBLE_LOCAL_ONLY".equals(resources.contributionState);
+                                break;
+                            default: available=true;break;
+                        }
+                        if(!available)continue;
+                        AndroidCapabilityCatalog.Spec spec=AndroidCapabilityCatalog.spec(capability);
+                        long bounded=Math.min(ttl,spec.maxGrantMs);
+                        if(bounded<=0)continue;
+                        androidNode.grant(peer,capability,spec.minimumTier,AioAndroidNode.Privacy.FOUNDER_ONLY,bounded);
+                        granted++;
+                    }
+                    recordEvidence("CHATGPT_ANDROID_CONTROL_GRANTED",null,-1);
+                    lastLocalEvent="Founder granted "+granted+" currently available Android capability classes to ChatGPT for 5 minutes";
+                    showSurface();
+                }catch(Exception failure){notice("GPT Android grant held: "+safeCode(failure));}
+            }
+            @Override public void onRejected(String reason){lastLocalEvent=reason;refreshViews();}
+        });
+    }
+
+    private void revokeChatGptAndroidGrants(){
+        String peer=ChatGptAndroidToolContract.LOCAL_PEER_ID;
+        for(AioAndroidNode.Capability capability:AndroidCapabilityCatalog.remoteCapabilities())
+            androidNode.revokePeerCapability(peer,capability);
+        recordEvidence("CHATGPT_ANDROID_GRANTS_REVOKED",null,-1);
+        lastLocalEvent="ChatGPT Android capability grants revoked";
         showSurface();
     }
 
@@ -1450,7 +1524,9 @@ public class MainActivity extends Activity {
                 "AIO owns durable project memory, device authority, execution custody, and receipts. "+
                 "Continue coherently from the supplied AIO compatibility projection. "+
                 "When the Founder requests work that requires the Windows AIO/PC environment, use aio_windows_objective_submit. "+
-                "That tool submits a bounded objective into AIO; it is not a shell. Treat only its returned verified receipt as evidence of submission, never as proof that execution finished. "+
+                "When the Founder requests inspection or action on this Android device, use aio_android_capability_invoke. "+
+                "Android actions are bounded typed capabilities and can be denied when the Founder has not granted that capability or a platform prerequisite is inactive. "+
+                "The Windows tool submits a bounded objective into AIO; it is not a shell. Treat only returned verified receipts as evidence, never as proof that downstream execution finished. "+
                 "Never claim a PC, Android, Git, build, test, or deployment effect unless supplied AIO evidence proves it.";
             chatGpt.respond(intentId,privacy,draftText,null,instructions,context.input,
                 (name,arguments)->executeChatGptTool(name,arguments),
@@ -1501,6 +1577,9 @@ public class MainActivity extends Activity {
 
     private String executeChatGptTool(String name,String arguments)throws Exception{
         ChatGptAioToolContract.requireKnown(name);
+        if(ChatGptAndroidToolContract.isTool(name))
+            return executeChatGptAndroidTool(arguments);
+
         String instruction=ChatGptAioToolContract.parseInstruction(arguments);
         Session selected=session;
         if(selected==null||!selected.authenticated||!current(selected))
@@ -1510,6 +1589,35 @@ public class MainActivity extends Activity {
         }catch(Exception failure){
             try{failSession(selected,failure);}catch(Exception ignored){}
             return new JSONObject().put("ok",false).put("error",safeCode(failure)).toString();
+        }
+    }
+
+    private String executeChatGptAndroidTool(String arguments)throws Exception{
+        ChatGptAndroidToolContract.Invocation invocation=ChatGptAndroidToolContract.parse(arguments);
+        AndroidCapabilityDispatcher.Result result=null;
+        UUID requestId=UUID.randomUUID();
+        try{
+            result=capabilityDispatcher.dispatch(
+                ChatGptAndroidToolContract.LOCAL_PEER_ID,requestId,invocation.payload);
+            String reply=new String(result.payload,StandardCharsets.UTF_8);
+            if(reply.length()>120*1024)
+                throw new IllegalArgumentException("CHATGPT_ANDROID_TOOL_OUTPUT_BUDGET");
+            recordEvidence(
+                result.accepted?"CHATGPT_ANDROID_TOOL_ACCEPTED":"CHATGPT_ANDROID_TOOL_DENIED",
+                requestId.toString(),-1);
+            JSONObject out=new JSONObject();
+            out.put("ok",result.accepted);
+            out.put("requestId",requestId.toString());
+            out.put("capability",result.capability);
+            out.put("action",result.action);
+            out.put("code",result.code);
+            out.put("manifestedDependencies",result.manifestedDependencies);
+            out.put("totalDependencies",result.totalDependencies);
+            out.put("androidReply",new JSONObject(reply));
+            return out.toString();
+        }finally{
+            java.util.Arrays.fill(invocation.payload,(byte)0);
+            if(result!=null&&result.payload!=null)java.util.Arrays.fill(result.payload,(byte)0);
         }
     }
 
