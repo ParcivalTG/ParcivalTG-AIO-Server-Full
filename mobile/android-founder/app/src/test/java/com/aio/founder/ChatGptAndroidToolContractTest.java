@@ -45,6 +45,22 @@ public class ChatGptAndroidToolContractTest {
         }
     }
 
+    @Test public void screenCaptureIsForcedIntoGptRequestBudget()throws Exception{
+        ChatGptAndroidToolContract.Invocation invocation=ChatGptAndroidToolContract.parse(
+            "{\"action\":\"screen.capture\",\"args_json\":\"{\\\"quality\\\":75,\\\"maxBytes\\\":320000}\"}");
+        try{
+            AndroidCapabilityProtocol.Request request=AndroidCapabilityProtocol.parse(invocation.payload);
+            assertEquals(AioAndroidNode.Capability.SCREEN_OBSERVE,request.capability);
+            assertEquals(55L,AndroidCapabilityProtocol.integer(request.args,"quality",30,75,0));
+            assertEquals((long)AndroidRemoteScreenPolicy.GPT_MAX_JPEG_BYTES,
+                AndroidCapabilityProtocol.integer(request.args,"maxBytes",
+                    AndroidRemoteScreenPolicy.MIN_JPEG_BYTES,
+                    AndroidRemoteScreenPolicy.MAX_JPEG_BYTES,0));
+        }finally{
+            java.util.Arrays.fill(invocation.payload,(byte)0);
+        }
+    }
+
     @Test public void unknownToolActionAndExtraTopLevelFieldsFailClosed()throws Exception{
         try{
             ChatGptAndroidToolContract.parse(
