@@ -90,8 +90,10 @@ final class ChatGptOAuthController implements AutoCloseable {
                 String requestLine=readRequestLine(socket.getInputStream());
                 String callbackUrl=ChatGptLoopbackHttp.callbackUrl(requestLine,server.getLocalPort());
                 ChatGptAuthContract.Callback callback=attempt.validateCallback(callbackUrl);
+                if(attempt.registration)
+                    store.saveIssuedRegistration(attempt.hostId,callback.clientId);
                 state(run,listener,"CHATGPT_AUTH_EXCHANGING");
-                String expectedSubject=registration==null?null:registration.subject;
+                String expectedSubject=registration==null||registration.subject.isBlank()?null:registration.subject;
                 ChatGptSessionCodec.Session session=provider.exchange(
                     attempt,callback,expectedSubject,System.currentTimeMillis()/1000L);
                 store.save(session);
