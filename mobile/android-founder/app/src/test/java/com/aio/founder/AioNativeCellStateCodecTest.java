@@ -18,8 +18,29 @@ public class AioNativeCellStateCodecTest {
         return rows;
     }
 
-    @Test public void repeatedRowsPromoteCellPortfolioAndRoundTrip()throws Exception{
-        JSONArray rows=repeatedEvidence(128);
+    private JSONArray distantRepeatedCells(int unique,int cycles,int payloadBytes)throws Exception{
+        java.util.Random random=new java.util.Random(771);
+        String[] payloads=new String[unique];
+        for(int i=0;i<unique;i++){
+            byte[] bytes=new byte[payloadBytes];random.nextBytes(bytes);
+            payloads[i]=java.util.Base64.getEncoder().encodeToString(bytes);
+            java.util.Arrays.fill(bytes,(byte)0);
+        }
+        JSONArray rows=new JSONArray();
+        for(int cycle=0;cycle<cycles;cycle++){
+            for(int i=0;i<unique;i++){
+                JSONObject row=new JSONObject();
+                row.put("code","CELL_PORTFOLIO");
+                row.put("slot",i);
+                row.put("payload",payloads[i]);
+                rows.put(row);
+            }
+        }
+        return rows;
+    }
+
+    @Test public void distantRepeatedRowsPromoteCellPortfolioAndRoundTrip()throws Exception{
+        JSONArray rows=distantRepeatedCells(32,4,1536);
         AioNativeCellStateCodec.Decision decision=AioNativeCellStateCodec.decide(rows);
         assertTrue(decision.cellArchive);
         assertTrue(decision.stored.startsWith("@AIOCELL1:"));
@@ -28,11 +49,12 @@ public class AioNativeCellStateCodecTest {
     }
 
     @Test public void selectiveTailReadsOnlyRequestedLogicalRows()throws Exception{
-        JSONArray rows=repeatedEvidence(256);
+        JSONArray rows=distantRepeatedCells(32,4,1536);
         String stored=AioNativeCellStateCodec.encodeArray(rows);
+        assertTrue(stored.startsWith("@AIOCELL1:"));
         JSONArray tail=AioNativeCellStateCodec.tail(stored,3);
         assertEquals(3,tail.length());
-        assertEquals("PRESENCE_READY",tail.getJSONObject(2).getString("code"));
+        assertEquals("CELL_PORTFOLIO",tail.getJSONObject(2).getString("code"));
     }
 
     @Test public void heterogeneousRowsCanFallBackToWholeStatePortfolio()throws Exception{
@@ -53,7 +75,7 @@ public class AioNativeCellStateCodecTest {
     }
 
     @Test public void selectiveCellWitnessDetectsCorruptionWithoutFullDecode()throws Exception{
-        JSONArray rows=repeatedEvidence(64);
+        JSONArray rows=distantRepeatedCells(32,4,1536);
         String stored=AioNativeCellStateCodec.encodeArray(rows);
         assertTrue(stored.startsWith("@AIOCELL1:"));
         String[] parts=stored.split(":",5);
