@@ -156,13 +156,19 @@ public final class AndroidScreenProjectionService extends Service {
     Snapshot snapshotInternal(){return current;}
 
     byte[] captureJpegInternal(int quality,int maxBytes)throws Exception{
+        return captureJpegInternal(quality,maxBytes,
+            AndroidRemoteScreenPolicy.region(0,0,1000,1000));
+    }
+
+    byte[] captureJpegInternal(int quality,int maxBytes,AndroidRemoteScreenPolicy.Region region)throws Exception{
         if(quality<30||quality>90)throw new IllegalArgumentException("SCREEN_JPEG_QUALITY_INVALID");
         if(maxBytes<32_768||maxBytes>MAX_FRAME_BYTES)throw new IllegalArgumentException("SCREEN_FRAME_BUDGET_INVALID");
+        if(region==null)throw new IllegalArgumentException("SCREEN_REGION_REQUIRED");
         synchronized(gate){
             if(reader==null||display==null||projection==null)throw new IllegalStateException("SCREEN_CAPTURE_NOT_ACTIVE");
             Image image=reader.acquireLatestImage();
             if(image==null)return null;
-            Bitmap padded=null,cropped=null;
+            Bitmap padded=null,manifested=null;
             try{
                 Image.Plane[] planes=image.getPlanes();
                 if(planes.length<1)throw new IllegalStateException("SCREEN_PLANE_MISSING");
@@ -172,11 +178,17 @@ public final class AndroidScreenProjectionService extends Service {
                 int paddedWidth=current.width+(rowStride-pixelStride*current.width)/pixelStride;
                 padded=Bitmap.createBitmap(paddedWidth,current.height,Bitmap.Config.ARGB_8888);
                 padded.copyPixelsFromBuffer(buffer);
-                cropped=Bitmap.createBitmap(padded,0,0,current.width,current.height);
-                return encodeJpegBounded(cropped,quality,maxBytes);
+
+                int left=AndroidRemoteScreenPolicy.pixelStart(region.x1,current.width);
+                int top=AndroidRemoteScreenPolicy.pixelStart(region.y1,current.height);
+                int right=AndroidRemoteScreenPolicy.pixelEndExclusive(region.x2,current.width);
+                int bottom=AndroidRemoteScreenPolicy.pixelEndExclusive(region.y2,current.height);
+                if(right<=left||bottom<=top)throw new IllegalStateException("SCREEN_REGION_EMPTY");
+                manifested=Bitmap.createBitmap(padded,left,top,right-left,bottom-top);
+                return encodeJpegBounded(manifested,quality,maxBytes);
             }finally{
-                if(cropped!=null)cropped.recycle();
-                if(padded!=null)paddingSafeRecycle(padded,cropped);
+                if(manifested!=null)manifested.recycle();
+                if(padded!=null)paddingSafeRecycle(padded,manifested);
                 image.close();
             }
         }
