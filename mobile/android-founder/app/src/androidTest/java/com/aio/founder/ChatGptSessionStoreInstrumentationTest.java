@@ -36,6 +36,33 @@ public class ChatGptSessionStoreInstrumentationTest {
         }
     }
 
+    @Test public void issuedClientMayBindVerifiedSubjectExactlyOnce()throws Exception{
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        ChatGptSessionStore store=new ChatGptSessionStore(context);
+        store.clearAll();
+        try{
+            String host=store.hostId();
+            String client="oaiapp_subject_binding_test";
+            store.saveIssuedRegistration(host,client);
+
+            ChatGptTokenContract.Tokens tokens=new ChatGptTokenContract.Tokens(
+                "access","refresh","id","Bearer",3600,1000,4600,4000,
+                java.util.Set.of("openid","offline_access","resource.invoke","chatgpt.tokens.use.direct"));
+            ChatGptSessionCodec.Session session=new ChatGptSessionCodec.Session(
+                host,client,"verified-subject","founder@example.test","Founder",tokens);
+            store.save(session);
+
+            ChatGptSessionStore.Registration registration=store.registration();
+            assertNotNull(registration);
+            assertEquals(client,registration.clientId);
+            assertEquals("verified-subject",registration.subject);
+            assertEquals("founder@example.test",registration.email);
+            assertNotNull(store.load());
+        }finally{
+            store.clearAll();
+        }
+    }
+
     @Test public void issuedClientReplacementFailsClosed()throws Exception{
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         ChatGptSessionStore store=new ChatGptSessionStore(context);
