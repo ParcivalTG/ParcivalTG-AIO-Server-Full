@@ -173,19 +173,47 @@ public final class AndroidScreenProjectionService extends Service {
                 padded=Bitmap.createBitmap(paddedWidth,current.height,Bitmap.Config.ARGB_8888);
                 padded.copyPixelsFromBuffer(buffer);
                 cropped=Bitmap.createBitmap(padded,0,0,current.width,current.height);
-                ByteArrayOutputStream out=new ByteArrayOutputStream();
-                if(!cropped.compress(Bitmap.CompressFormat.JPEG,quality,out))throw new IllegalStateException("SCREEN_JPEG_ENCODE_FAILED");
-                byte[] encoded=out.toByteArray();
-                if(encoded.length>maxBytes){
-                    java.util.Arrays.fill(encoded,(byte)0);
-                    throw new IllegalStateException("SCREEN_FRAME_BUDGET");
-                }
-                return encoded;
+                return encodeJpegBounded(cropped,quality,maxBytes);
             }finally{
                 if(cropped!=null)cropped.recycle();
                 if(padded!=null)paddingSafeRecycle(padded,cropped);
                 image.close();
             }
+        }
+    }
+
+    private static byte[] encodeJpegBounded(Bitmap source,int requestedQuality,int maxBytes)throws Exception{
+        Bitmap working=source;
+        int quality=requestedQuality;
+        try{
+            for(int attempt=0;attempt<12;attempt++){
+                ByteArrayOutputStream out=new ByteArrayOutputStream(Math.min(maxBytes,256*1024));
+                if(!working.compress(Bitmap.CompressFormat.JPEG,quality,out))
+                    throw new IllegalStateException("SCREEN_JPEG_ENCODE_FAILED");
+                byte[] encoded=out.toByteArray();
+                int encodedBytes=encoded.length;
+                if(encodedBytes<=maxBytes)return encoded;
+                java.util.Arrays.fill(encoded,(byte)0);
+
+                if(quality>30){
+                    quality=Math.max(30,quality-10);
+                    continue;
+                }
+
+                if(working.getWidth()<=320||working.getHeight()<=320)break;
+                double ratio=Math.sqrt((double)maxBytes/(double)encodedBytes)*0.88d;
+                ratio=Math.max(0.50d,Math.min(0.85d,ratio));
+                int nextWidth=Math.max(320,(int)Math.floor(working.getWidth()*ratio));
+                int nextHeight=Math.max(320,(int)Math.floor(working.getHeight()*ratio));
+                if(nextWidth>=working.getWidth()&&nextHeight>=working.getHeight())break;
+                Bitmap scaled=Bitmap.createScaledBitmap(working,nextWidth,nextHeight,true);
+                if(working!=source&&!working.isRecycled())working.recycle();
+                working=scaled;
+                quality=Math.min(requestedQuality,55);
+            }
+            throw new IllegalStateException("SCREEN_FRAME_BUDGET");
+        }finally{
+            if(working!=source&&!working.isRecycled())working.recycle();
         }
     }
 
