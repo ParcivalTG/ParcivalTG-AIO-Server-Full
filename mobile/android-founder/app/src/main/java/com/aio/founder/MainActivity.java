@@ -477,7 +477,12 @@ public class MainActivity extends Activity {
             String pin=configuration.getString("pin","").trim();
             pairingMaterial=secrets.hasSecret()&&pairingGenerationMatches()&&
                 client.matches("[A-Za-z0-9_.-]{1,128}")&&!pin.isEmpty();
-            if(pairingMaterial)E2eCodec.pinnedKey(pin);
+            if(pairingMaterial){
+                E2eCodec.pinnedKey(pin);
+                String lease=secrets.readText("lease");
+                if(lease==null)pairingMaterial=false;
+                else AioProjectionMembrane.validateLeaseImport(lease,System.currentTimeMillis());
+            }
         }catch(Exception ignored){pairingMaterial=false;}
 
         String destination=configuration.getString("endpoint","").trim();
@@ -1112,32 +1117,36 @@ public class MainActivity extends Activity {
     }
     private void reauthenticatePersistentSession(Session selected,AioPersistentNodeService.LocalBinder binder){
         try{
-            byte[] witness=freshWitness(selected);
-            PresenceProtocol.Frame hello,status,pong;long elapsed;byte[] ping;
-            try{
-                hello=exchange(selected,PresenceProtocol.HELLO,PresenceProtocol.HELLO_REPLY,UUID.randomUUID(),witness);
-            }finally{Arrays.fill(witness,(byte)0);}
-            if(hello.flags!=0)throw new SecurityException("PRESENCE_WITNESS_REJECTED");
-            status=exchange(selected,PresenceProtocol.STATUS,PresenceProtocol.STATUS_REPLY,UUID.randomUUID(),new byte[0]);
-            ping=PresenceProtocol.newNonce().getBytes(StandardCharsets.US_ASCII);long started=System.nanoTime();
-            pong=exchange(selected,PresenceProtocol.PING,PresenceProtocol.PING_REPLY,UUID.randomUUID(),ping);
-            elapsed=(System.nanoTime()-started)/1_000_000L;
+            // The persistent service already owns an authenticated Presence socket.
+            // Re-sending HELLO on that socket is intentionally forbidden by the
+            // Windows session gate. Restore the internal projection from the
+            // verified service state, then observe fresh STATUS/PING and rotate
+            // Windows authority through the already-authenticated session.
+            presence.transition(AioPresenceField.Phase.AUTHENTICATED,
+                "PERSISTENT_NODE_AUTHENTICATED_SESSION_RESTORED");
+            PresenceProtocol.Frame status=exchange(
+                selected,PresenceProtocol.STATUS,PresenceProtocol.STATUS_REPLY,UUID.randomUUID(),new byte[0]);
+            byte[] ping=PresenceProtocol.newNonce().getBytes(StandardCharsets.US_ASCII);
+            long started=System.nanoTime();
+            PresenceProtocol.Frame pong=exchange(
+                selected,PresenceProtocol.PING,PresenceProtocol.PING_REPLY,UUID.randomUUID(),ping);
+            long elapsed=(System.nanoTime()-started)/1_000_000L;
             if(pong.flags!=0||!Arrays.equals(ping,pong.payload))throw new SecurityException("PING_INVALID");
             synchronized(authorityLock){
                 if(!current(selected))return;
-                AioProjectionMembrane.absorbHello(presence,hello);
                 AioProjectionMembrane.absorbStatus(presence,status,elapsed);
                 if(!presence.projectAndroidShadow().ready)throw new IOException("PC_CORE_NOT_READY");
                 selected.authenticated=true;
             }
-            boolean verified=binder!=null&&binder.remoteCapabilityEligible();
-            peerIdentityVerified=verified;
-            recordEvidence("PERSISTENT_NODE_SESSION_RESTORED",null,elapsed);
+            PresenceAuthorityClient.Verified verified=ensureFreshAuthority(selected,true);
+            if(binder!=null&&selected.transport instanceof CloudPresenceTransport)
+                binder.peerVerified((CloudPresenceTransport)selected.transport);
+            peerIdentityVerified=true;
+            recordEvidence("PERSISTENT_NODE_SESSION_RESTORED_PINNED_E2E",null,verified.gatewayRoundTripMs);
             ui(selected,()->{
-                state="PRESENCE_READY";lastStatusAt=System.currentTimeMillis();lastRoundTripMs=elapsed;
-                lastLocalEvent=verified?
-                    "Persistent R5 node restored; pinned peer verification retained in-process":
-                    "Persistent R5 node restored; send Dialogue to re-establish pinned E2E peer verification";
+                state="PRESENCE_READY";lastStatusAt=System.currentTimeMillis();
+                lastRoundTripMs=Math.max(elapsed,verified.gatewayRoundTripMs);
+                lastLocalEvent="Persistent R5 node restored; rotating Windows authority and pinned gateway proof are verified";
             });
         }catch(Exception failure){failSession(selected,failure);}
     }
@@ -1194,6 +1203,26 @@ public class MainActivity extends Activity {
         if(!current(selected))throw new IOException("REQUEST_CANCELLED");
         return response;
     }
+
+    private PresenceAuthorityClient.Verified ensureFreshAuthority(Session selected,boolean force)throws Exception{
+        if(selected==null||selected.transport==null||!current(selected))
+            throw new IOException("REQUEST_CANCELLED");
+        String lease=secrets.readText("lease");
+        long now=System.currentTimeMillis();
+        if(!force&&!PresenceAuthorityClient.needsRefresh(lease,now)){
+            return new PresenceAuthorityClient.Verified(
+                lease,AioProjectionMembrane.leaseExpiresAtUnixMs(lease),0);
+        }
+        PresenceAuthorityClient.Verified verified=
+            PresenceAuthorityClient.refreshAndVerify(selected.transport,selected.pin,now);
+        secrets.saveText("lease",verified.leaseJson);
+        peerIdentityVerified=true;
+        AioPersistentNodeService.LocalBinder binder=persistentNodeBinder;
+        if(selected.persistentOwned&&binder!=null&&selected.transport instanceof CloudPresenceTransport)
+            binder.peerVerified((CloudPresenceTransport)selected.transport);
+        recordEvidence("WINDOWS_AUTHORITY_REFRESHED_PINNED_E2E",null,verified.gatewayRoundTripMs);
+        return verified;
+    }
     private void connect(Session selected,String destination){
         try{
             PresenceTransport direct=null;
@@ -1220,6 +1249,7 @@ public class MainActivity extends Activity {
                 if(!presence.projectAndroidShadow().ready)throw new IOException("PC_CORE_NOT_READY");
                 selected.authenticated=true;
             }
+            PresenceAuthorityClient.Verified authority=ensureFreshAuthority(selected,true);
             if(!destination.isEmpty()&&"R5_CLOUD".equals(selected.route))
                 recordEvidence("DIRECT_PRESENCE_UNAVAILABLE_CLOUD_FALLBACK",null,-1);
             recordEvidence("PRESENCE_CONNECTED_"+selected.route,null,ready.pingRoundTripMs);
@@ -1232,9 +1262,10 @@ public class MainActivity extends Activity {
             ui(selected,()->{
                 state="PRESENCE_READY";
                 lastLocalEvent="DIRECT".equals(selected.route)?
-                    "Connected directly; Dialogue uses the pinned encrypted gateway":
-                    "Connected through E2E R5 transport to the pinned encrypted gateway";
-                lastStatusAt=System.currentTimeMillis();lastRoundTripMs=ready.pingRoundTripMs;
+                    "Connected directly; rotating Windows authority and pinned gateway proof verified":
+                    "Connected through E2E R5 transport; rotating Windows authority and pinned gateway proof verified";
+                lastStatusAt=System.currentTimeMillis();
+                lastRoundTripMs=Math.max(ready.pingRoundTripMs,authority.gatewayRoundTripMs);
             });
         }catch(Exception failure){failSession(selected,failure);}
     }
@@ -1320,7 +1351,11 @@ public class MainActivity extends Activity {
                 AioProjectionMembrane.absorbStatus(presence,response,elapsed);
                 if(!presence.projectAndroidShadow().ready)throw new IOException("PC_CORE_NOT_READY");
             }
-            ui(selected,()->{lastStatusAt=System.currentTimeMillis();lastRoundTripMs=elapsed;});
+            PresenceAuthorityClient.Verified authority=ensureFreshAuthority(selected,false);
+            ui(selected,()->{
+                lastStatusAt=System.currentTimeMillis();
+                lastRoundTripMs=Math.max(elapsed,authority.gatewayRoundTripMs);
+            });
         }catch(Exception failure){failSession(selected,failure);}
     }
     private void submitIntent(){
@@ -1468,6 +1503,7 @@ public class MainActivity extends Activity {
         UUID requestId=UUID.randomUUID();String toolIntentId=UUID.randomUUID().toString();
         try{
             if(!current(selected))throw new IOException("REQUEST_CANCELLED");
+            ensureFreshAuthority(selected,false);
             String lease=secrets.readText("lease");
             byte[] witness=freshWitness(selected);
             String witnessText;
@@ -1520,6 +1556,7 @@ public class MainActivity extends Activity {
         E2eCodec.Request request=null;byte[] command=null,plaintext=null;UUID requestId=UUID.randomUUID();boolean attempted=false;
         try{
             if(!current(selected))return;
+            ensureFreshAuthority(selected,false);
             String lease=secrets.readText("lease");
             submit=new FounderDialogueSubmit(submit.intentId,submit.text,submit.privacyClass,"AIO",lease,
                 new String(freshWitness(selected),StandardCharsets.UTF_8));
