@@ -147,7 +147,8 @@ final class ChatGptProviderRuntime implements AutoCloseable {
 
                 ArrayList<ChatGptResponsesContract.InputItem> input=new ArrayList<>();
                 if(context!=null)input.addAll(context);
-                input.addAll(reasoning.replayTail(8));
+                input.addAll(ChatGptInputBudget.newestWithin(
+                    reasoning.replayTail(8),8,96*1024));
                 input.add(ChatGptResponsesContract.message("user",projected));
 
                 List<ChatGptResponsesContract.FunctionTool> tools=
