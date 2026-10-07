@@ -15,6 +15,10 @@ final class ChatGptProviderRuntime implements AutoCloseable {
         default void onFailure(String code){}
     }
 
+    interface ToolExecutor {
+        String execute(String name,String arguments)throws Exception;
+    }
+
     private final ChatGptSessionStore store;
     private final ChatGptProviderClient client;
     private final ChatGptProviderState state=new ChatGptProviderState();
@@ -121,6 +125,11 @@ final class ChatGptProviderRuntime implements AutoCloseable {
 
     void respond(String intentId,String privacyClass,String rawText,String minimizedText,String instructions,
                  List<ChatGptResponsesContract.InputItem> context,Listener listener){
+        respond(intentId,privacyClass,rawText,minimizedText,instructions,context,null,listener);
+    }
+
+    void respond(String intentId,String privacyClass,String rawText,String minimizedText,String instructions,
+                 List<ChatGptResponsesContract.InputItem> context,ToolExecutor toolExecutor,Listener listener){
         requireOpen();
         Listener target=safe(listener);
         worker.execute(()->{
@@ -133,14 +142,36 @@ final class ChatGptProviderRuntime implements AutoCloseable {
                     throw new IllegalStateException("CHATGPT_PROVIDER_NOT_READY");
                 if(intentId==null||intentId.isBlank()||intentId.length()>512)
                     throw new IllegalArgumentException("CHATGPT_INTENT_ID_INVALID");
+
                 ArrayList<ChatGptResponsesContract.InputItem> input=new ArrayList<>();
                 if(context!=null)input.addAll(context);
                 input.addAll(reasoning.replayTail(8));
                 input.add(ChatGptResponsesContract.message("user",projected));
-                ChatGptResponsesContract.Completion completion=client.respond(
-                    session.tokens.accessToken,snapshot.selectedModel,instructions,input,target::onDelta);
-                reasoning.append(intentId,completion.reasoningItems);
-                target.onCompleted(completion);
+
+                List<ChatGptResponsesContract.FunctionTool> tools=
+                    toolExecutor==null?List.of():ChatGptAioToolContract.p0Tools();
+
+                for(int round=0;round<4;round++){
+                    ChatGptResponsesContract.Completion completion=client.respond(
+                        session.tokens.accessToken,snapshot.selectedModel,instructions,input,tools,target::onDelta);
+                    reasoning.append(intentId,completion.reasoningItems);
+
+                    if(completion.functionCalls.isEmpty()){
+                        target.onCompleted(completion);
+                        return;
+                    }
+                    if(toolExecutor==null)
+                        throw new SecurityException("CHATGPT_TOOL_EXECUTOR_REQUIRED");
+
+                    ChatGptToolLoop.Step step=ChatGptToolLoop.advance(
+                        input,completion,(name,arguments)->toolExecutor.execute(name,arguments));
+                    if(step.terminal){
+                        target.onCompleted(step.completion);
+                        return;
+                    }
+                    input=new ArrayList<>(step.nextInput);
+                }
+                throw new IllegalStateException("CHATGPT_TOOL_LOOP_LIMIT");
             }catch(Exception failure){
                 String code=safeCode(failure);target.onFailure(code);publishFailure(code);
             }
