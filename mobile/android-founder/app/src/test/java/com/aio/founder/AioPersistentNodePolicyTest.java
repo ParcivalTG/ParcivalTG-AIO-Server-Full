@@ -19,6 +19,13 @@ public class AioPersistentNodePolicyTest {
         assertEquals(AioPersistentNodePolicy.Decision.STOP,AioPersistentNodePolicy.decide(null,false));
     }
 
+    @Test public void systemRestoreRequiresFounderOptIn(){
+        assertEquals(AioPersistentNodePolicy.Decision.START,
+            AioPersistentNodePolicy.decide(AioPersistentNodePolicy.ACTION_RESTORE,true));
+        assertEquals(AioPersistentNodePolicy.Decision.STOP,
+            AioPersistentNodePolicy.decide(AioPersistentNodePolicy.ACTION_RESTORE,false));
+    }
+
     @Test public void unknownActionFailsClosed(){
         assertEquals(AioPersistentNodePolicy.Decision.REJECT,
             AioPersistentNodePolicy.decide("unexpected",true));
