@@ -1109,6 +1109,7 @@ public class MainActivity extends Activity {
             if(!client.matches("[A-Za-z0-9_.-]{1,128}"))throw new SecurityException("CLIENT_ID_INVALID");
             Session restored=new Session(epoch.invalidate(),client,pin);
             restored.transport=cloud;restored.route=cloud.label();restored.persistentOwned=true;
+            restored.remoteSessionEpoch=cloud.remoteSessionEpoch();
             session=restored;state="RESTORING_PERSISTENT_NODE";peerIdentityVerified=binder.remoteCapabilityEligible();
             refreshViews();io.execute(()->reauthenticatePersistentSession(restored,binder));
         }catch(Exception failure){
@@ -1250,6 +1251,8 @@ public class MainActivity extends Activity {
                 selected.authenticated=true;
             }
             PresenceAuthorityClient.Verified authority=ensureFreshAuthority(selected,true);
+            if(selected.transport instanceof CloudPresenceTransport)
+                selected.remoteSessionEpoch=((CloudPresenceTransport)selected.transport).remoteSessionEpoch();
             if(!destination.isEmpty()&&"R5_CLOUD".equals(selected.route))
                 recordEvidence("DIRECT_PRESENCE_UNAVAILABLE_CLOUD_FALLBACK",null,-1);
             recordEvidence("PRESENCE_CONNECTED_"+selected.route,null,ready.pingRoundTripMs);
@@ -1281,8 +1284,16 @@ public class MainActivity extends Activity {
                 if(frame==null)continue;
                 if(!current(selected)||!selected.authenticated)break;
 
+                long observedEpoch=cloud.remoteSessionEpoch();
+                boolean remoteSessionChanged=selected.remoteSessionEpoch!=0&&
+                    observedEpoch!=selected.remoteSessionEpoch;
+                if(selected.remoteSessionEpoch==0)selected.remoteSessionEpoch=observedEpoch;
                 AndroidCapabilityDispatcher.Result result;
-                if(!peerIdentityVerified){
+                if(remoteSessionChanged){
+                    peerIdentityVerified=false;
+                    result=deniedCapabilityResult(
+                        "UNVERIFIED","UNVERIFIED","REMOTE_SESSION_CHANGED_RECONNECT_REQUIRED");
+                }else if(!peerIdentityVerified){
                     result=deniedCapabilityResult("UNVERIFIED","UNVERIFIED","REMOTE_PEER_NOT_VERIFIED");
                 }else if(capabilityAuditHeld){
                     result=deniedCapabilityResult("UNKNOWN","UNKNOWN","AUDIT_STATE_UNAVAILABLE");
@@ -1324,6 +1335,10 @@ public class MainActivity extends Activity {
 
                 reply=result.payload;
                 cloud.sendNodeReply(frame.id,result.accepted,reply);
+                if(remoteSessionChanged){
+                    failSession(selected,new IOException("REMOTE_SESSION_CHANGED_RECONNECT_REQUIRED"));
+                    break;
+                }
             }catch(Exception failure){
                 if(current(selected))failSession(selected,failure);
                 break;
@@ -1676,8 +1691,10 @@ public class MainActivity extends Activity {
     private void failSession(Session selected,Exception failure){
         try{
             if(selected.persistentOwned&&persistentNodeBinder!=null)
-                persistentNodeBinder.releaseCloudLink(selected.transport instanceof CloudPresenceTransport?
-                    (CloudPresenceTransport)selected.transport:null);
+                persistentNodeBinder.recoverCloudLink(
+                    selected.transport instanceof CloudPresenceTransport?
+                        (CloudPresenceTransport)selected.transport:null,
+                    safeCode(failure));
             else if(selected.transport!=null)selected.transport.close();
         }catch(Exception ignored){}
         selected.persistentOwned=false;
@@ -1830,7 +1847,11 @@ public class MainActivity extends Activity {
         io.shutdownNow();nodeIo.shutdownNow();super.onDestroy();
     }
     private static final class Session{
-        final long generation;final String client,pin;volatile boolean authenticated,persistentOwned;volatile PresenceTransport transport;volatile String route="NOT_CONNECTED";
+        final long generation;final String client,pin;
+        volatile boolean authenticated,persistentOwned;
+        volatile long remoteSessionEpoch;
+        volatile PresenceTransport transport;
+        volatile String route="NOT_CONNECTED";
         Session(long generation,String client,String pin){this.generation=generation;this.client=client;this.pin=pin;}
     }
     static final class Endpoint{
