@@ -1523,8 +1523,16 @@ public class MainActivity extends Activity {
                 "Android actions are bounded typed capabilities and can be denied when the Founder has not granted that capability or a platform prerequisite is inactive. "+
                 "The Windows tool submits a bounded objective into AIO; it is not a shell. Treat only returned verified receipts as evidence, never as proof that downstream execution finished. "+
                 "Never claim a PC, Android, Git, build, test, or deployment effect unless supplied AIO evidence proves it.";
+            ChatGptProviderRuntime.ToolExecutor manifestedTools=new ChatGptProviderRuntime.ToolExecutor(){
+                @Override public ChatGptToolLoop.Execution execute(String name,String arguments)throws Exception{
+                    return executeChatGptTool(name,arguments);
+                }
+                @Override public List<ChatGptResponsesContract.FunctionTool> tools(){
+                    return projectChatGptTools();
+                }
+            };
             chatGpt.respond(intentId,privacy,draftText,null,instructions,context.input,
-                (name,arguments)->executeChatGptTool(name,arguments),
+                manifestedTools,
                 new ChatGptProviderRuntime.Listener(){
                     @Override public void onDelta(String delta){
                         runOnUiThread(()->{
@@ -1570,6 +1578,14 @@ public class MainActivity extends Activity {
         }catch(Exception failure){notice("GPT projection held: "+safeCode(failure));}
     }
 
+    private List<ChatGptResponsesContract.FunctionTool> projectChatGptTools(){
+        Session selected=session;
+        boolean windowsReady=selected!=null&&selected.authenticated&&current(selected);
+        Set<AioAndroidNode.Capability> androidCapabilities=
+            androidNode.activeCapabilities(ChatGptAndroidToolContract.LOCAL_PEER_ID);
+        return ChatGptSelectiveToolManifest.project(windowsReady,androidCapabilities);
+    }
+
     private ChatGptToolLoop.Execution executeChatGptTool(String name,String arguments)throws Exception{
         ChatGptAioToolContract.requireKnown(name);
         if(ChatGptAndroidToolContract.isTool(name))
@@ -1602,11 +1618,17 @@ public class MainActivity extends Activity {
 
             if(result.accepted&&"screen.capture".equals(invocation.action)){
                 JSONObject screen=androidReply.getJSONObject("result");
-                String contentB64=screen.getString("contentB64");
-                imageInput=ChatGptResponsesContract.jpegImage(contentB64);
-                screen.remove("contentB64");
-                screen.put("imageAttached",true);
-                screen.put("imageTransport","responses.input_image.data_url");
+                if(screen.has("contentB64")){
+                    String contentB64=screen.getString("contentB64");
+                    imageInput=ChatGptResponsesContract.jpegImage(contentB64);
+                    screen.remove("contentB64");
+                    screen.put("imageAttached",true);
+                    screen.put("imageTransport","responses.input_image.data_url");
+                }else{
+                    screen.put("imageAttached",false);
+                    if(screen.optBoolean("unchanged",false))
+                        screen.put("nonManifestation","UNCHANGED_REGION");
+                }
             }else if(reply.length()>120*1024){
                 recordEvidence("CHATGPT_ANDROID_TOOL_OUTPUT_HELD",requestId.toString(),-1);
                 return ChatGptToolLoop.Execution.text(new JSONObject()
@@ -1615,6 +1637,16 @@ public class MainActivity extends Activity {
                     .put("action",invocation.action)
                     .put("requestId",requestId.toString())
                     .toString());
+            }
+
+            JSONObject hindsight=null;
+            if(result.accepted&&("gesture.tap".equals(invocation.action)||
+                                "gesture.swipe".equals(invocation.action))){
+                HindsightWitness witness=postActionHindsightWitness(invocation.action);
+                if(witness!=null){
+                    hindsight=witness.metadata;
+                    if(witness.image!=null)imageInput=witness.image;
+                }
             }
 
             recordEvidence(
@@ -1629,11 +1661,67 @@ public class MainActivity extends Activity {
             out.put("manifestedDependencies",result.manifestedDependencies);
             out.put("totalDependencies",result.totalDependencies);
             out.put("androidReply",androidReply);
+            if(hindsight!=null)out.put("hindsightWitness",hindsight);
             return imageInput==null?
                 ChatGptToolLoop.Execution.text(out.toString()):
                 new ChatGptToolLoop.Execution(out.toString(),List.of(imageInput));
         }finally{
             java.util.Arrays.fill(invocation.payload,(byte)0);
+            if(result!=null&&result.payload!=null)java.util.Arrays.fill(result.payload,(byte)0);
+        }
+    }
+
+    private static final class HindsightWitness{
+        final JSONObject metadata;
+        final ChatGptResponsesContract.InputItem image;
+        HindsightWitness(JSONObject metadata,ChatGptResponsesContract.InputItem image){
+            this.metadata=metadata;this.image=image;
+        }
+    }
+
+    private HindsightWitness postActionHindsightWitness(String action){
+        long delay="gesture.swipe".equals(action)?520L:280L;
+        try{Thread.sleep(delay);}
+        catch(InterruptedException interrupted){
+            Thread.currentThread().interrupt();
+            return null;
+        }
+
+        ChatGptAndroidToolContract.Invocation capture=null;
+        AndroidCapabilityDispatcher.Result result=null;
+        try{
+            capture=ChatGptAndroidToolContract.parse(
+                "{\"action\":\"screen.capture\",\"args_json\":\"{\\\"quality\\\":45,\\\"maxBytes\\\":120000}\"}");
+            UUID witnessId=UUID.randomUUID();
+            result=capabilityDispatcher.dispatch(
+                ChatGptAndroidToolContract.LOCAL_PEER_ID,witnessId,capture.payload);
+            JSONObject reply=new JSONObject(new String(result.payload,StandardCharsets.UTF_8));
+            JSONObject metadata=new JSONObject();
+            metadata.put("requestId",witnessId.toString());
+            metadata.put("delayMs",delay);
+            metadata.put("accepted",result.accepted);
+            metadata.put("code",result.code);
+            if(!result.accepted){
+                metadata.put("observation","NOT_MANIFESTED");
+                return new HindsightWitness(metadata,null);
+            }
+            JSONObject screen=reply.getJSONObject("result");
+            ChatGptResponsesContract.InputItem image=null;
+            if(screen.has("contentB64")){
+                String contentB64=screen.getString("contentB64");
+                image=ChatGptResponsesContract.jpegImage(contentB64);
+                screen.remove("contentB64");
+                screen.put("imageAttached",true);
+                screen.put("imageTransport","responses.input_image.data_url");
+            }
+            metadata.put("screen",screen);
+            metadata.put("observation",image==null?"METADATA_ONLY":"POST_ACTION_IMAGE");
+            recordEvidence("CHATGPT_ANDROID_HINDSIGHT_WITNESS",witnessId.toString(),delay);
+            return new HindsightWitness(metadata,image);
+        }catch(Exception held){
+            return null;
+        }finally{
+            if(capture!=null&&capture.payload!=null)java.util.Arrays.fill(capture.payload,(byte)0);
             if(result!=null&&result.payload!=null)java.util.Arrays.fill(result.payload,(byte)0);
         }
     }
