@@ -133,9 +133,9 @@ final class ChatGptAuthContract {
         StringBuilder out=new StringBuilder();
         for(Map.Entry<String,String> row:values.entrySet()){
             if(out.length()>0)out.append('&');
-            out.append(URLEncoder.encode(row.getKey(),StandardCharsets.UTF_8))
+            out.append(urlEncode(row.getKey()))
                .append('=')
-               .append(URLEncoder.encode(row.getValue(),StandardCharsets.UTF_8));
+               .append(urlEncode(row.getValue()));
         }
         return out.toString();
     }
@@ -206,11 +206,22 @@ final class ChatGptAuthContract {
         if(raw==null||raw.isEmpty())return out;
         for(String pair:raw.split("&")){
             String[] kv=pair.split("=",2);
-            String key=URLDecoder.decode(kv[0],StandardCharsets.UTF_8);
-            String value=URLDecoder.decode(kv.length==2?kv[1]:"",StandardCharsets.UTF_8);
+            String key=urlDecode(kv[0]);
+            String value=urlDecode(kv.length==2?kv[1]:"");
             if(out.put(key,value)!=null)throw new IllegalArgumentException("CHATGPT_OAUTH_DUPLICATE_PARAMETER");
         }
         return out;
+    }
+
+
+    private static String urlEncode(String value){
+        try{return URLEncoder.encode(value,"UTF-8");}
+        catch(java.io.UnsupportedEncodingException impossible){throw new AssertionError(impossible);}
+    }
+
+    private static String urlDecode(String value){
+        try{return URLDecoder.decode(value,"UTF-8");}
+        catch(java.io.UnsupportedEncodingException impossible){throw new AssertionError(impossible);}
     }
 
     private static String safeCode(String value){
