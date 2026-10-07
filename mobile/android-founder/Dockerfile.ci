@@ -1,0 +1,31 @@
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    GRADLE_HOME=/opt/gradle/gradle-8.13 \
+    PATH=/opt/gradle/gradle-8.13/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openjdk-17-jdk-headless ca-certificates curl unzip git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/android-sdk/cmdline-tools /opt/gradle \
+    && curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline.zip \
+    && unzip -q /tmp/cmdline.zip -d /opt/android-sdk/cmdline-tools \
+    && mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest \
+    && rm /tmp/cmdline.zip \
+    && curl -fsSL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip \
+    && unzip -q /tmp/gradle.zip -d /opt/gradle \
+    && rm /tmp/gradle.zip
+
+RUN yes | sdkmanager --licenses >/dev/null || true \
+    && sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+WORKDIR /workspace
+COPY . .
+
+RUN gradle --no-daemon --max-workers=1 :app:testDebugUnitTest :app:lint :app:assembleDebug \
+    && sha256sum app/build/outputs/apk/debug/app-debug.apk | tee /tmp/aio-android-apk.sha256
+
+CMD ["sh","-c","echo AIO_ANDROID_CLOUD_CI_READY; cat /tmp/aio-android-apk.sha256; tail -f /dev/null"]
