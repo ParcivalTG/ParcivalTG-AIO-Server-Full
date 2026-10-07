@@ -314,18 +314,21 @@ public final class AioPersistentNodeService extends Service {
                     ":ttl_ms="+Math.max(0,authorityExpiresAtUnixMs-System.currentTimeMillis()));
             }
         }catch(Exception failure){
+            boolean expired=false;
             synchronized(linkGate){
                 if(cloudLink!=cloud)return;
                 long expires=authorityExpiresAtUnixMs;
-                if(expires<=System.currentTimeMillis()){
+                expired=expires<=System.currentTimeMillis();
+                if(expired){
                     try{state.linkAttached();}catch(Exception ignored){}
                     current=new Snapshot(state.snapshot().phase.name(),System.currentTimeMillis(),
-                        "AUTHORITY_EXPIRED_REFRESH_HOLD:"+failure.getClass().getSimpleName());
+                        "AUTHORITY_EXPIRED_RECONNECT:"+failure.getClass().getSimpleName());
                 }else{
                     current=new Snapshot(state.snapshot().phase.name(),System.currentTimeMillis(),
                         "AUTHORITY_REFRESH_RETRY:"+failure.getClass().getSimpleName());
                 }
             }
+            if(expired)recoverExpectedCloudLink(cloud,"AUTHORITY_EXPIRED");
         }
     }
 
