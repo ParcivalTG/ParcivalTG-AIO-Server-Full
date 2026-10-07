@@ -1729,9 +1729,11 @@ public class MainActivity extends Activity {
         try{
             capture=ChatGptAndroidToolContract.parse(
                 "{\"action\":\"screen.capture\",\"args_json\":\"{\\\"quality\\\":45,\\\"maxBytes\\\":120000}\"}");
+            AndroidCapabilityProtocol.Request projected=capture.request;
+            boolean latentWitnessInjected=gptScreenWitnesses.inject(projected);
             UUID witnessId=UUID.randomUUID();
-            result=capabilityDispatcher.dispatch(
-                ChatGptAndroidToolContract.LOCAL_PEER_ID,witnessId,capture.payload);
+            result=capabilityDispatcher.dispatchProjected(
+                ChatGptAndroidToolContract.LOCAL_PEER_ID,witnessId,projected);
             JSONObject reply=new JSONObject(new String(result.payload,StandardCharsets.UTF_8));
             JSONObject metadata=new JSONObject();
             metadata.put("requestId",witnessId.toString());
@@ -1743,6 +1745,12 @@ public class MainActivity extends Activity {
                 return new HindsightWitness(metadata,null);
             }
             JSONObject screen=reply.getJSONObject("result");
+            screen.put("latentWitnessInjected",latentWitnessInjected);
+            if(screen.has("sha256")){
+                String sha=screen.getString("sha256");
+                gptScreenWitnesses.remember(projected,sha);
+            }
+            screen.put("latentWitnessCells",gptScreenWitnesses.size());
             ChatGptResponsesContract.InputItem image=null;
             if(screen.has("contentB64")){
                 String contentB64=screen.getString("contentB64");
