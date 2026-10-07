@@ -92,6 +92,19 @@ final class ChatGptAndroidToolContract {
         if(capability==null||!AndroidCapabilityCatalog.supports(capability,action))
             throw new SecurityException("CHATGPT_ANDROID_ACTION_NOT_ALLOWED");
 
+        if("screen.capture".equals(action)){
+            long requested=AndroidCapabilityProtocol.integer(
+                argsValue,"maxBytes",
+                AndroidRemoteScreenPolicy.MIN_JPEG_BYTES,
+                AndroidRemoteScreenPolicy.MAX_JPEG_BYTES,
+                AndroidRemoteScreenPolicy.GPT_MAX_JPEG_BYTES);
+            argsValue.put("maxBytes",Long.valueOf(Math.min(
+                requested,AndroidRemoteScreenPolicy.GPT_MAX_JPEG_BYTES)));
+            long requestedQuality=AndroidCapabilityProtocol.integer(
+                argsValue,"quality",30,75,AndroidRemoteScreenPolicy.DEFAULT_QUALITY);
+            argsValue.put("quality",Long.valueOf(Math.min(requestedQuality,55)));
+        }
+
         String request="{\"schema\":\""+AndroidCapabilityProtocol.REQUEST_SCHEMA+"\""+
             ",\"capability\":\""+capability.name()+"\""+
             ",\"action\":\""+AndroidCapabilityProtocol.escape(action)+"\""+
