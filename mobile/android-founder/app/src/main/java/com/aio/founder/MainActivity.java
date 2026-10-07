@@ -1581,7 +1581,7 @@ public class MainActivity extends Activity {
     private List<ChatGptResponsesContract.FunctionTool> projectChatGptTools(){
         Session selected=session;
         boolean windowsReady=selected!=null&&selected.authenticated&&current(selected);
-        Set<AioAndroidNode.Capability> androidCapabilities=
+        java.util.Set<AioAndroidNode.Capability> androidCapabilities=
             androidNode.activeCapabilities(ChatGptAndroidToolContract.LOCAL_PEER_ID);
         return ChatGptSelectiveToolManifest.project(windowsReady,androidCapabilities);
     }
