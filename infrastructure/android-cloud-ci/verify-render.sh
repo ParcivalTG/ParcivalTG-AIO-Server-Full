@@ -49,7 +49,7 @@ gradle --version
 LOG="$PUBLIC/android-verification.log"
 set +e
 gradle -p mobile/android-founder --no-daemon --max-workers=1 \
-  :app:testDebugUnitTest :app:lint :app:assembleDebug 2>&1 | tee "$LOG"
+  :app:testDebugUnitTest :app:lint :app:assembleDebug :app:assembleDebugAndroidTest 2>&1 | tee "$LOG"
 STATUS=${PIPESTATUS[0]}
 set -e
 
@@ -78,16 +78,24 @@ if [[ "$STATUS" -ne 0 ]]; then
 fi
 
 APK="mobile/android-founder/app/build/outputs/apk/debug/app-debug.apk"
+TEST_APK="mobile/android-founder/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
 test -f "$APK"
+test -f "$TEST_APK"
 APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
 APK_BYTES="$(stat -c %s "$APK")"
+TEST_APK_SHA="$(sha256sum "$TEST_APK" | awk '{print $1}')"
+TEST_APK_BYTES="$(stat -c %s "$TEST_APK")"
 {
   echo "gradle_exit=0"
   echo "apk_sha256=$APK_SHA"
   echo "apk_bytes=$APK_BYTES"
+  echo "android_test_apk_sha256=$TEST_APK_SHA"
+  echo "android_test_apk_bytes=$TEST_APK_BYTES"
+  echo "android_test_compiled=true"
   echo "signing_class=EPHEMERAL_DEBUG_VERIFICATION_ONLY"
 } >> "$PUBLIC/test-summary.txt"
 cp "$APK" "$PUBLIC/aio-founder-debug-verification-only.apk"
+cp "$TEST_APK" "$PUBLIC/aio-founder-debug-androidTest-verification-only.apk"
 echo "=== AIO_ANDROID_VERIFICATION_SUMMARY ==="
 cat "$PUBLIC/test-summary.txt"
 echo "=== END_AIO_ANDROID_VERIFICATION_SUMMARY ==="
