@@ -25,7 +25,8 @@ RUN yes | sdkmanager --licenses >/dev/null || true \
 WORKDIR /workspace
 COPY . .
 
-RUN gradle --no-daemon --max-workers=1 :app:testDebugUnitTest :app:lint :app:assembleDebug \
-    && sha256sum app/build/outputs/apk/debug/app-debug.apk | tee /tmp/aio-android-apk.sha256
+RUN gradle --no-daemon --max-workers=1 :app:testDebugUnitTest :app:lint :app:assembleDebug :app:assembleDebugAndroidTest \
+    && sha256sum app/build/outputs/apk/debug/app-debug.apk | tee /tmp/aio-android-apk.sha256 \
+    && sha256sum app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk | tee /tmp/aio-android-test-apk.sha256
 
-CMD ["sh","-c","echo AIO_ANDROID_CLOUD_CI_READY; cat /tmp/aio-android-apk.sha256; tail -f /dev/null"]
+CMD ["sh","-c","echo AIO_ANDROID_CLOUD_CI_READY; cat /tmp/aio-android-apk.sha256; cat /tmp/aio-android-test-apk.sha256; tail -f /dev/null"]
