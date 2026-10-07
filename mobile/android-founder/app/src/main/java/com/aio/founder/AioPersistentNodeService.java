@@ -119,7 +119,25 @@ public final class AioPersistentNodeService extends Service {
         if(worker==null||worker.isShutdown())worker=Executors.newSingleThreadScheduledExecutor();
         startForegroundCompat(notification("AIO Android node active","Persistent process active; remote link and capabilities require fresh verification."));
         refreshFromState("MEASURING");
-        worker.scheduleWithFixedDelay(this::updateSnapshot,0,AioPersistentNodePolicy.heartbeatMillis(),TimeUnit.MILLISECONDS);
+        scheduleTemporalPulse(0);
+    }
+
+    private void scheduleTemporalPulse(long delayMs){
+        ScheduledExecutorService active=worker;
+        if(!running||active==null||active.isShutdown())return;
+        active.schedule(this::runTemporalPulse,Math.max(0,delayMs),TimeUnit.MILLISECONDS);
+    }
+
+    private void runTemporalPulse(){
+        if(!running)return;
+        updateSnapshot();
+        if(!running)return;
+        AioPersistentNodeState.Snapshot node=state.snapshot();
+        long expiry;
+        synchronized(linkGate){expiry=authorityExpiresAtUnixMs;}
+        long next=AioEventHorizonPulsePolicy.delayMillis(
+            node.phase,expiry,System.currentTimeMillis());
+        scheduleTemporalPulse(next);
     }
 
     private void updateSnapshot(){
