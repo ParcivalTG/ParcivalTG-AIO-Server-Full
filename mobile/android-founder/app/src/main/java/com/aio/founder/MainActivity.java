@@ -477,12 +477,7 @@ public class MainActivity extends Activity {
             String pin=configuration.getString("pin","").trim();
             pairingMaterial=secrets.hasSecret()&&pairingGenerationMatches()&&
                 client.matches("[A-Za-z0-9_.-]{1,128}")&&!pin.isEmpty();
-            if(pairingMaterial){
-                E2eCodec.pinnedKey(pin);
-                String lease=secrets.readText("lease");
-                if(lease==null)pairingMaterial=false;
-                else AioProjectionMembrane.validateLeaseImport(lease,System.currentTimeMillis());
-            }
+            if(pairingMaterial)E2eCodec.pinnedKey(pin);
         }catch(Exception ignored){pairingMaterial=false;}
 
         String destination=configuration.getString("endpoint","").trim();
