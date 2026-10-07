@@ -88,6 +88,8 @@ public class MainActivity extends Activity {
     private Spinner privacyView, voiceModeView,chatGptModelView;
     private String draftText = "",chatGptStreamingText="";
     private String lastGptScreenSha256="",lastGptActionFingerprint="";
+    private final AioLatentScreenWitnessCache gptScreenWitnesses=
+        new AioLatentScreenWitnessCache(12);
     private int sameGptActionCount;
     private int draftPrivacy;
     private JSONArray history = new JSONArray(), evidence = new JSONArray();
@@ -1610,8 +1612,10 @@ public class MainActivity extends Activity {
 
     private ChatGptToolLoop.Execution executeChatGptAndroidTool(String arguments)throws Exception{
         ChatGptAndroidToolContract.Invocation invocation=ChatGptAndroidToolContract.parse(arguments);
-        AndroidCapabilityProtocol.Request invocationRequest=
-            AndroidCapabilityProtocol.parse(invocation.payload);
+        AndroidCapabilityProtocol.Request invocationRequest=invocation.request;
+        boolean latentWitnessInjected=false;
+        if("screen.capture".equals(invocation.action))
+            latentWitnessInjected=gptScreenWitnesses.inject(invocationRequest);
         String beforeScreenSha=lastGptScreenSha256;
         String fingerprint=invocation.action+"|"+ChatGptResponsesContract.canonical(invocationRequest.args);
         if(fingerprint.equals(lastGptActionFingerprint))sameGptActionCount++;
@@ -1619,15 +1623,20 @@ public class MainActivity extends Activity {
         AndroidCapabilityDispatcher.Result result=null;
         UUID requestId=UUID.randomUUID();
         try{
-            result=capabilityDispatcher.dispatch(
-                ChatGptAndroidToolContract.LOCAL_PEER_ID,requestId,invocation.payload);
+            result=capabilityDispatcher.dispatchProjected(
+                ChatGptAndroidToolContract.LOCAL_PEER_ID,requestId,invocationRequest);
             String reply=new String(result.payload,StandardCharsets.UTF_8);
             JSONObject androidReply=new JSONObject(reply);
             ChatGptResponsesContract.InputItem imageInput=null;
 
             if(result.accepted&&"screen.capture".equals(invocation.action)){
                 JSONObject screen=androidReply.getJSONObject("result");
-                if(screen.has("sha256"))lastGptScreenSha256=screen.getString("sha256");
+                if(screen.has("sha256")){
+                    lastGptScreenSha256=screen.getString("sha256");
+                    gptScreenWitnesses.remember(invocationRequest,lastGptScreenSha256);
+                }
+                screen.put("latentWitnessInjected",latentWitnessInjected);
+                screen.put("latentWitnessCells",gptScreenWitnesses.size());
                 if(screen.has("contentB64")){
                     String contentB64=screen.getString("contentB64");
                     imageInput=ChatGptResponsesContract.jpegImage(contentB64);
