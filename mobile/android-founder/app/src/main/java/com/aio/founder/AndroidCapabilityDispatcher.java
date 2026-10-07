@@ -2,6 +2,7 @@ package com.aio.founder;
 
 import android.content.Context;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
@@ -88,7 +89,8 @@ final class AndroidCapabilityDispatcher {
                 return "{\"encoding\":\"zlib\",\"level\":"+deflateLevel+
                     ",\"contentB64\":\""+AndroidCapabilityProtocol.escape(compressed)+"\"}";
             case "screen.capture":
-                args(request.args,Set.of("quality","maxBytes"),Set.of());
+                args(request.args,
+                    Set.of("quality","maxBytes","x1","y1","x2","y2","previousSha256"),Set.of());
                 int quality=AndroidRemoteScreenPolicy.validateQuality(
                     AndroidCapabilityProtocol.integer(request.args,"quality",30,75,AndroidRemoteScreenPolicy.DEFAULT_QUALITY));
                 int screenMaxBytes=AndroidRemoteScreenPolicy.validateMaxBytes(
@@ -97,14 +99,45 @@ final class AndroidCapabilityDispatcher {
                         AndroidRemoteScreenPolicy.MIN_JPEG_BYTES,
                         AndroidRemoteScreenPolicy.MAX_JPEG_BYTES,
                         AndroidRemoteScreenPolicy.DEFAULT_MAX_JPEG_BYTES));
+                boolean anyRegion=request.args.containsKey("x1")||request.args.containsKey("y1")||
+                    request.args.containsKey("x2")||request.args.containsKey("y2");
+                boolean fullRegionKeys=request.args.containsKey("x1")&&request.args.containsKey("y1")&&
+                    request.args.containsKey("x2")&&request.args.containsKey("y2");
+                if(anyRegion&&!fullRegionKeys)throw new IllegalArgumentException("SCREEN_REGION_KEYS");
+                AndroidRemoteScreenPolicy.Region region=fullRegionKeys?
+                    AndroidRemoteScreenPolicy.region(
+                        AndroidCapabilityProtocol.integer(request.args,"x1",0,999,0),
+                        AndroidCapabilityProtocol.integer(request.args,"y1",0,999,0),
+                        AndroidCapabilityProtocol.integer(request.args,"x2",1,1000,1000),
+                        AndroidCapabilityProtocol.integer(request.args,"y2",1,1000,1000)):
+                    AndroidRemoteScreenPolicy.region(0,0,1000,1000);
+                String previousSha=AndroidCapabilityProtocol.optionalString(
+                    request.args,"previousSha256",64,"").toLowerCase(java.util.Locale.ROOT);
+                if(!previousSha.isEmpty()&&!previousSha.matches("[0-9a-f]{64}"))
+                    throw new IllegalArgumentException("SCREEN_PREVIOUS_HASH_INVALID");
                 AndroidScreenProjectionService.Snapshot screen=prepared.screen;
                 if(screen==null)throw new SecurityException("SCREEN_CAPTURE_NOT_ACTIVE");
-                byte[] jpeg=AndroidScreenProjectionRuntime.captureJpeg(quality,screenMaxBytes);
+                byte[] jpeg=AndroidScreenProjectionRuntime.captureJpeg(quality,screenMaxBytes,region);
                 if(jpeg==null)throw new IllegalStateException("SCREEN_FRAME_NOT_READY");
-                try{return "{\"format\":\"jpeg\",\"width\":"+screen.width+",\"height\":"+screen.height+
-                    ",\"quality\":"+quality+",\"bytes\":"+jpeg.length+",\"contentB64\":\""+
-                    AndroidCapabilityProtocol.escape(Base64.getEncoder().encodeToString(jpeg))+"\"}";}
-                finally{java.util.Arrays.fill(jpeg,(byte)0);}
+                try{
+                    String sha=sha256(jpeg);
+                    int left=AndroidRemoteScreenPolicy.pixelStart(region.x1,screen.width);
+                    int top=AndroidRemoteScreenPolicy.pixelStart(region.y1,screen.height);
+                    int right=AndroidRemoteScreenPolicy.pixelEndExclusive(region.x2,screen.width);
+                    int bottom=AndroidRemoteScreenPolicy.pixelEndExclusive(region.y2,screen.height);
+                    String metadata="{\"format\":\"jpeg\",\"sourceWidth\":"+screen.width+
+                        ",\"sourceHeight\":"+screen.height+
+                        ",\"regionPermille\":{\"x1\":"+region.x1+",\"y1\":"+region.y1+
+                        ",\"x2\":"+region.x2+",\"y2\":"+region.y2+"}"+
+                        ",\"regionPixels\":{\"left\":"+left+",\"top\":"+top+
+                        ",\"width\":"+(right-left)+",\"height\":"+(bottom-top)+"}"+
+                        ",\"qualityCeiling\":"+quality+",\"bytes\":"+jpeg.length+
+                        ",\"sha256\":\""+sha+"\"";
+                    if(!previousSha.isEmpty()&&previousSha.equals(sha))
+                        return metadata+",\"unchanged\":true,\"contentOmitted\":true}";
+                    return metadata+",\"unchanged\":false,\"contentB64\":\""+
+                        AndroidCapabilityProtocol.escape(Base64.getEncoder().encodeToString(jpeg))+"\"}";
+                }finally{java.util.Arrays.fill(jpeg,(byte)0);}
             case "gesture.tap":
                 args(request.args,Set.of("x","y","durationMs"),Set.of("x","y"));
                 int tapX=(int)AndroidCapabilityProtocol.integer(request.args,"x",0,1000,0);
@@ -187,6 +220,16 @@ final class AndroidCapabilityDispatcher {
     static void args(StrictProjectionJson.ObjectValue args,Set<String> allowed,Set<String> required){
         if(args==null||!allowed.containsAll(args.keySet())||!args.keySet().containsAll(required))
             throw new IllegalArgumentException("ANDROID_ARGS_KEYS");
+    }
+
+    private static String sha256(byte[] bytes)throws Exception{
+        byte[] digest=MessageDigest.getInstance("SHA-256").digest(bytes);
+        try{
+            StringBuilder out=new StringBuilder(64);
+            for(byte value:digest)
+                out.append(String.format(java.util.Locale.ROOT,"%02x",value&0xff));
+            return out.toString();
+        }finally{java.util.Arrays.fill(digest,(byte)0);}
     }
 
     private static String resourceJson(AndroidResourceProjection.Snapshot s){
