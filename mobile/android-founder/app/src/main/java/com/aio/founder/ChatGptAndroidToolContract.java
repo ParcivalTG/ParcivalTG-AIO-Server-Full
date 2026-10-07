@@ -31,9 +31,11 @@ final class ChatGptAndroidToolContract {
     static final class Invocation {
         final String action;
         final AioAndroidNode.Capability capability;
+        final AndroidCapabilityProtocol.Request request;
         final byte[] payload;
-        Invocation(String action,AioAndroidNode.Capability capability,byte[] payload){
-            this.action=action;this.capability=capability;this.payload=payload;
+        Invocation(String action,AioAndroidNode.Capability capability,
+                   AndroidCapabilityProtocol.Request request,byte[] payload){
+            this.action=action;this.capability=capability;this.request=request;this.payload=payload;
         }
     }
 
@@ -128,7 +130,7 @@ final class ChatGptAndroidToolContract {
             java.util.Arrays.fill(payload,(byte)0);
             throw new SecurityException("CHATGPT_ANDROID_TOOL_MAPPING_INVALID");
         }
-        return new Invocation(action,capability,payload);
+        return new Invocation(action,capability,nativeRequest,payload);
     }
 
     static Map<String,AioAndroidNode.Capability> actions(){
