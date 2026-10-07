@@ -58,10 +58,13 @@ final class ChatGptAndroidToolContract {
     static ChatGptResponsesContract.FunctionTool tool(){
         return new ChatGptResponsesContract.FunctionTool(
             TOOL,
-            "Invoke one bounded Android AIO capability on this device. "+
-            "Use only when the Founder asks to inspect or act on the Android device. "+
-            "The action is mediated by endpoint-local Founder grants, Android platform permissions, "+
-            "fresh screen/Accessibility/SAF prerequisites, causal admission, and a typed receipt. "+
+            "Invoke one bounded Android AIO capability on this device. Use only when the Founder asks to inspect or act on Android. "+
+            "args_json contracts: resource.status {}; resource.sha256 {contentB64}; resource.deflate {contentB64,level? 1..9}; "+
+            "screen.capture {quality? 30..55,maxBytes?}; AIO clamps GPT images to 160000 bytes and attaches the JPEG as a real next-turn image; "+
+            "gesture.tap {x,y,durationMs?} and gesture.swipe {x1,y1,x2,y2,durationMs?}, where coordinates are permille 0..1000 across the current screen and duration is 40..1500 ms; "+
+            "clipboard.read {}; clipboard.write {text}; notification.post {title,text}; "+
+            "file.list {path?}; file.read {path,maxBytes?}; file.sha256 {path}; file.write {parentPath?,name,mimeType?,contentB64}; file.rename {path,newName}; file.delete {path}. "+
+            "Every action is mediated by endpoint-local Founder grants, Android platform permissions, fresh screen/Accessibility/SAF prerequisites, causal admission, and a typed receipt. "+
             "No shell, arbitrary code, silent permission enablement, raw filesystem access, or silent app install is exposed.",
             PARAMETERS);
     }
