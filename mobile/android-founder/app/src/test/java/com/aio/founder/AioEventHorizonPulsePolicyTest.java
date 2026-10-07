@@ -38,6 +38,24 @@ public class AioEventHorizonPulsePolicyTest {
                 AioPersistentNodeState.Phase.ACTIVE_NO_LINK,0,now));
     }
 
+    @Test public void oneHourAuthorityNeedsFarFewerPulsesThanFlatThirtySeconds(){
+        long now=1_800_000_000_000L;
+        long expiry=now+59*60_000L;
+        long refreshBoundary=expiry-PresenceAuthorityClient.REFRESH_WINDOW_MS;
+        long t=now;
+        int pulses=0;
+        while(t<refreshBoundary&&pulses<1000){
+            long d=AioEventHorizonPulsePolicy.delayMillis(
+                AioPersistentNodeState.Phase.LINK_VERIFIED,expiry,t);
+            t+=d;
+            pulses++;
+        }
+        int flat=(int)Math.ceil((refreshBoundary-now)/30_000.0);
+        assertTrue(pulses<=30);
+        assertTrue(flat>=90);
+        assertTrue(pulses*4<flat*2); // comfortably below half the flat wake count
+    }
+
     @Test public void missingVerifiedAuthorityPulsesImmediately(){
         assertEquals(AioEventHorizonPulsePolicy.MIN_PULSE_MS,
             AioEventHorizonPulsePolicy.delayMillis(
