@@ -32,6 +32,33 @@ public class ChatGptResponsesContractTest {
         catch(IllegalArgumentException expected){assertEquals("CHATGPT_INPUT_ROLE_INVALID",expected.getMessage());}
     }
 
+    @Test public void boundedJpegProjectsAsResponsesInputImage()throws Exception{
+        byte[] jpeg=new byte[]{(byte)0xff,(byte)0xd8,(byte)0xff,0x00};
+        String base64=java.util.Base64.getEncoder().encodeToString(jpeg);
+        ChatGptResponsesContract.InputItem image=ChatGptResponsesContract.jpegImage(base64);
+        assertTrue(image.json().contains("\"type\":\"input_image\""));
+        assertTrue(image.json().contains("\"image_url\":\"data:image/jpeg;base64,"));
+        assertTrue(image.json().contains("\"detail\":\"auto\""));
+
+        String request=new String(ChatGptResponsesContract.request(
+            "gpt-test","Inspect the Android screen.",
+            List.of(ChatGptResponsesContract.message("user","What is visible?"),image)),
+            StandardCharsets.UTF_8);
+        assertTrue(request.contains("data:image/jpeg;base64,"));
+        assertTrue(request.contains("\"store\":false"));
+        assertTrue(request.contains("\"stream\":true"));
+    }
+
+    @Test public void malformedOrOversizeImageFailsClosed(){
+        try{ChatGptResponsesContract.jpegImage("not-base64!");fail();}
+        catch(IllegalArgumentException expected){assertEquals("CHATGPT_INPUT_IMAGE_INVALID",expected.getMessage());}
+
+        byte[] huge=new byte[AndroidRemoteScreenPolicy.GPT_MAX_JPEG_BYTES+1];
+        huge[0]=(byte)0xff;huge[1]=(byte)0xd8;
+        try{ChatGptResponsesContract.jpegImage(java.util.Base64.getEncoder().encodeToString(huge));fail();}
+        catch(IllegalArgumentException expected){assertEquals("CHATGPT_INPUT_IMAGE_INVALID",expected.getMessage());}
+    }
+
     @Test public void modelCatalogKeepsOnlyVisibleModelsInServerOrder()throws Exception{
         String payload="{\"models\":["+
             "{\"slug\":\"gpt-a\",\"display_name\":\"A\",\"visibility\":\"list\"},"+
