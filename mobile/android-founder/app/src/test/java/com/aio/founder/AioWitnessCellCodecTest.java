@@ -26,8 +26,14 @@ public class AioWitnessCellCodecTest {
         JSONObject row=representative();
         String stored=AioWitnessCellCodec.encode(row);
         JSONObject decoded=AioWitnessCellCodec.decode(stored);
-        assertEquals(row.keySet(),decoded.keySet());
-        for(String key:row.keySet())
+        java.util.LinkedHashSet<String> sourceKeys=new java.util.LinkedHashSet<>();
+        java.util.Iterator<String> sourceIt=row.keys();
+        while(sourceIt.hasNext())sourceKeys.add(sourceIt.next());
+        java.util.LinkedHashSet<String> decodedKeys=new java.util.LinkedHashSet<>();
+        java.util.Iterator<String> decodedIt=decoded.keys();
+        while(decodedIt.hasNext())decodedKeys.add(decodedIt.next());
+        assertEquals(sourceKeys,decodedKeys);
+        for(String key:sourceKeys)
             assertEquals(String.valueOf(row.get(key)),String.valueOf(decoded.get(key)));
     }
 
