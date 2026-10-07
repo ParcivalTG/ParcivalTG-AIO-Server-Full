@@ -108,20 +108,23 @@ final class ChatGptAndroidToolContract {
             argsValue.put("quality",Long.valueOf(Math.min(requestedQuality,55)));
         }
 
-        String request="{\"schema\":\""+AndroidCapabilityProtocol.REQUEST_SCHEMA+"\""+
-            ",\"capability\":\""+capability.name()+"\""+
-            ",\"action\":\""+AndroidCapabilityProtocol.escape(action)+"\""+
-            ",\"privacyClass\":\"FOUNDER_ONLY\""+
-            ",\"args\":"+ChatGptResponsesContract.canonical(argsValue)+"}";
-        byte[] payload=request.getBytes(StandardCharsets.UTF_8);
+        // Direct phase projection: once provider arguments are validated into AIO
+        // semantics, do not materialize an intermediate JSON capability envelope.
+        AndroidCapabilityProtocol.Request nativeRequest=
+            new AndroidCapabilityProtocol.Request(
+                capability,action,AioAndroidNode.Privacy.FOUNDER_ONLY,argsValue);
+        byte[] payload=AioProjectionQuantumCodec.encode(nativeRequest);
         if(payload.length>AndroidCapabilityProtocol.MAX_REQUEST_BYTES){
             java.util.Arrays.fill(payload,(byte)0);
             throw new IllegalArgumentException("CHATGPT_ANDROID_TOOL_REQUEST_BUDGET");
         }
-        // Parse once before execution so tool-to-capability mapping and argument
-        // representation are proven by the same protocol parser used at dispatch.
+        // Re-absorb through the same boundary parser so the compact representation
+        // proves exact semantic identity before any capability can execute.
         AndroidCapabilityProtocol.Request parsed=AndroidCapabilityProtocol.parse(payload);
-        if(parsed.capability!=capability||!parsed.action.equals(action)){
+        if(parsed.capability!=capability||!parsed.action.equals(action)||
+           parsed.privacy!=AioAndroidNode.Privacy.FOUNDER_ONLY||
+           !ChatGptResponsesContract.canonical(parsed.args).equals(
+               ChatGptResponsesContract.canonical(argsValue))){
             java.util.Arrays.fill(payload,(byte)0);
             throw new SecurityException("CHATGPT_ANDROID_TOOL_MAPPING_INVALID");
         }
