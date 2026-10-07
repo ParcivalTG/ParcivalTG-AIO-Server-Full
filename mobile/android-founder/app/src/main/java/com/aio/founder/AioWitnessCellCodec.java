@@ -80,7 +80,9 @@ final class AioWitnessCellCodec {
         if(row.length()<1||row.length()>MAX_FIELDS)return null;
         ByteArrayOutputStream out=new ByteArrayOutputStream(96);
         out.write(VERSION);out.write(row.length());
-        for(String key:row.keySet()){
+        java.util.Iterator<String> keys=row.keys();
+        while(keys.hasNext()){
+            String key=keys.next();
             Object value=row.get(key);
             if(value instanceof JSONObject||value instanceof org.json.JSONArray)return null;
             writeSymbol(out,key,KEY_IDS);
