@@ -15,8 +15,8 @@ public class ChatGptAuthContractTest {
         String raw=new URI(url).getRawQuery();
         for(String pair:raw.split("&")){
             String[] kv=pair.split("=",2);
-            out.put(URLDecoder.decode(kv[0],StandardCharsets.UTF_8),
-                URLDecoder.decode(kv.length==2?kv[1]:"",StandardCharsets.UTF_8));
+            out.put(URLDecoder.decode(kv[0],"UTF-8"),
+                URLDecoder.decode(kv.length==2?kv[1]:"","UTF-8"));
         }
         return out;
     }
