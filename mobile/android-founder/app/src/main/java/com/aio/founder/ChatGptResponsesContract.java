@@ -96,6 +96,13 @@ final class ChatGptResponsesContract {
             "{\"type\":\"input_image\",\"image_url\":\"data:image/jpeg;base64,"+escape(base64)+"\",\"detail\":\"auto\"}]}");
     }
 
+    static boolean isInputImage(InputItem item){
+        if(item==null||item.json()==null)return false;
+        String json=item.json();
+        return json.contains("\"type\":\"input_image\"")&&
+            json.contains("data:image/jpeg;base64,");
+    }
+
     static InputItem reasoning(String rawJson)throws Exception{
         if(rawJson==null||rawJson.isBlank()||rawJson.length()>MAX_REASONING_ITEM_CHARS)
             throw new IllegalArgumentException("CHATGPT_REASONING_ITEM_INVALID");
