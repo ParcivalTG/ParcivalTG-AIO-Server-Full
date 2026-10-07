@@ -116,6 +116,16 @@ final class AioAndroidNode {
         return count;
     }
 
+    synchronized Set<Capability> activeCapabilities(String peer){
+        if(peer==null||peer.isBlank())return Set.of();
+        long now=System.currentTimeMillis();prune(now);
+        EnumSet<Capability> out=EnumSet.noneOf(Capability.class);
+        for(Grant grant:grants.values())
+            if(grant.peer.equals(peer)&&!revoked.contains(grant.id)&&now<grant.expiresMs)
+                out.add(grant.capability);
+        return Set.copyOf(out);
+    }
+
     synchronized List<Receipt> receipts(){return List.copyOf(receipts);}
 
     private void prune(long now){
