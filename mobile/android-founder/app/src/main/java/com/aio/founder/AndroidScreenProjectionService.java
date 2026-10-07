@@ -182,7 +182,7 @@ public final class AndroidScreenProjectionService extends Service {
         }
     }
 
-    private static byte[] encodeJpegBounded(Bitmap source,int requestedQuality,int maxBytes)throws Exception{
+    static byte[] encodeJpegBounded(Bitmap source,int requestedQuality,int maxBytes)throws Exception{
         Bitmap working=source;
         int quality=requestedQuality;
         try{
