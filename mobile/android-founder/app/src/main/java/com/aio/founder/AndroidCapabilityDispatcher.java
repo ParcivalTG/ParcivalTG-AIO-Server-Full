@@ -88,12 +88,18 @@ final class AndroidCapabilityDispatcher {
                 return "{\"encoding\":\"zlib\",\"level\":"+deflateLevel+
                     ",\"contentB64\":\""+AndroidCapabilityProtocol.escape(compressed)+"\"}";
             case "screen.capture":
-                args(request.args,Set.of("quality"),Set.of());
+                args(request.args,Set.of("quality","maxBytes"),Set.of());
                 int quality=AndroidRemoteScreenPolicy.validateQuality(
                     AndroidCapabilityProtocol.integer(request.args,"quality",30,75,AndroidRemoteScreenPolicy.DEFAULT_QUALITY));
+                int screenMaxBytes=AndroidRemoteScreenPolicy.validateMaxBytes(
+                    AndroidCapabilityProtocol.integer(
+                        request.args,"maxBytes",
+                        AndroidRemoteScreenPolicy.MIN_JPEG_BYTES,
+                        AndroidRemoteScreenPolicy.MAX_JPEG_BYTES,
+                        AndroidRemoteScreenPolicy.DEFAULT_MAX_JPEG_BYTES));
                 AndroidScreenProjectionService.Snapshot screen=prepared.screen;
                 if(screen==null)throw new SecurityException("SCREEN_CAPTURE_NOT_ACTIVE");
-                byte[] jpeg=AndroidScreenProjectionRuntime.captureJpeg(quality,AndroidRemoteScreenPolicy.MAX_JPEG_BYTES);
+                byte[] jpeg=AndroidScreenProjectionRuntime.captureJpeg(quality,screenMaxBytes);
                 if(jpeg==null)throw new IllegalStateException("SCREEN_FRAME_NOT_READY");
                 try{return "{\"format\":\"jpeg\",\"width\":"+screen.width+",\"height\":"+screen.height+
                     ",\"quality\":"+quality+",\"bytes\":"+jpeg.length+",\"contentB64\":\""+
